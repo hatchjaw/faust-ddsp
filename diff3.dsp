@@ -1,4 +1,6 @@
+
 import("stdfaust.lib");
+df = library("diff.lib");
 
 hiddenGain = hslider("[0]Hidden gain", .5, 0, 2, .01);
 hiddenDC = hslider("[1]Hidden dc", .5, -1, 1, .01);
@@ -133,7 +135,8 @@ process =
         : (_ <: _,_),(_ <: _,_),si.bus(NVARS)
         : route(4+NVARS,4+NVARS,(1,1),(2,NVARS+3),(3,2),(4,NVARS+4),par(n,NVARS,(n+5,n+3)))
         // Recurse gradients
-        : learn,_,_) ~ (!,si.bus(NVARS))
+        // : learn,_,_) ~ (!,si.bus(NVARS))
+        : df.learn(1<<5,(.01),NVARS),_,_) ~ (!,si.bus(NVARS))
     // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
     : _,si.block(NVARS),_,_
 with {
@@ -146,16 +149,3 @@ with {
         dc = -~_ <: attach(hbargraph("[6]Learned dc",-1,1));
     };
 };
-
-// TODO, use environment as a place to define and count variables
-diffvariables(val1,val2...) = environment {
-
-}.v(1) = val1,1,0,0 // should return this
-
-diffvar((c1,c2,c3)) = diffvar(vars) = environment {
-    N = outputs(vars);
-    i = nth(vars,i),dvec(N,i);
-    dvec(N,i) = par(j,i,0),1,par(k,N-i-1,0);
-}
-
-// TODO: momentum, parameter normalisation, 'batched' input with mean of the loss

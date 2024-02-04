@@ -14,16 +14,22 @@ process =
     : hgroup("DDSP",
         route(NVARS+2,NVARS+2,par(n,NVARS,(n+1,n+3)),(NVARS+1,1),(NVARS+2,2))
         : vgroup("Parameters",vgroup("Hidden", truth),vgroup("Learned", learnable))
-        : (_ <: _,_),(_ <: _,_),si.bus(NVARS)
-        : route(4+NVARS,4+NVARS,(1,1),(2,NVARS+3),(3,2),(4,NVARS+4),par(n,NVARS,(n+5,n+3)))
-        : vgroup("[0]Loss & gradients", df.learn(1<<4,5e-3,NVARS)),_,_
+        : route(2+NVARS,4+NVARS,
+            // Route ground truth output to df.learn and to output.
+            (1,1),(1,NVARS+3),
+            // Route learnable output to df.learn and to output.
+            (2,2),(2,NVARS+4),
+            // Route gradients to df.learn.
+            par(n,NVARS,(n+3,n+3))
+        )
+        : vgroup("[0]Loss & gradients", df.learn(1<<3,1e-2,NVARS)),_,_
     ) ~ (!,si.bus(NVARS))
     : _,si.block(NVARS),_,_
 with {
     in = no.noise;
 
-    hiddenFB = hslider("[1]alpha", .5, 0, .999, .001);
-    hiddenGain = hslider("[2]gain", .5, 0, 2, .001);
+    hiddenFB = hslider("[1]Feedback", .5, 0, .999, .001);
+    hiddenGain = hslider("[2]Gain", .5, 0, 2, .001);
     truth = + ~ (hiddenFB,_ : *) : _,hiddenGain : *;
 
     learnable = df.input(NVARS),par(n,NVARS,grad)

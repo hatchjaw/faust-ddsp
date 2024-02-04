@@ -150,10 +150,11 @@ const(val,nvars) = val,par(n,nvars,0);
 learn(windowSize, learningRate, nvars) =
     // Window the input signals
     par(i,2+nvars,window)
-    // Swap the order of ground truth and learnable inputs
-    : ro.cross(2),pds
+    // Calculate the difference between the ground truth and learnable outputs
+    // (Is cross necessary?)
+    : (ro.cross(2) : - ),pds
     // Calculate loss (this is just for show, since there's no sensitivity threshold)
-    : (- : abs <: loss,_),pds
+    : (_ <: loss,_),pds
     // Calculate gradients
     : _,gradients
     // Scale gradients by the learning rate
@@ -172,4 +173,34 @@ with {
     // A utility to duplicate the first input for combination with all remaining inputs.
     routeall = _,si.bus(nvars)
         : route(nvars+1,nvars*2,par(n,nvars,(1,2*n+1),(n+2,2*(n+1))));
+};
+
+// As above but takes batches of ground truth input.
+// Needs work...
+
+learnN(windowSize, learningRate, ntrain, nvars) =
+    // Window the input signals
+    par(i,ntrain+1+nvars,window)
+    // Calculate the difference between each training example and the learned output...
+    : route(ntrain+1,2*ntrain,par(n,ntrain,(n+1,2*n+2),(ntrain+1,2*n+1))),si.bus(nvars) 
+    : par(n,ntrain,-),si.bus(nvars)
+    // Take the mean
+    : (ba.parallelMean(ntrain) <: attach(hbargraph("mean delta",-1,1))),si.bus(nvars)
+    // Calculate loss
+    : (_ <: loss,_),pds
+    // And gradients
+    : _,gradients
+    // Scale gradients by the learning rate
+    : _,par(n,nvars,_,learningRate : *)
+with {
+    window = ba.slidingMean(windowSize);
+    // Loss function (L1 norm)
+    loss = abs <: attach(hbargraph("[100]loss",0,.05));
+    // A way to move the partial derivatives around.
+    pds = si.bus(nvars);
+    // Calculate gradients; for L1 norm: dy/dx_i * (learnable - groundtruth) / abs(learnable - groundtruth)
+    gradients = route(nvars+1,nvars+3,(1,1),par(n,nvars,(1,n*2+3),(n+2,2*n+2)))
+        : (abs,1e-10 : max),par(n,nvars, *)
+        : route(nvars+1,nvars*2,par(n,nvars,(1,2*n+2),(n+2,2*n+1)))
+        : par(n,nvars, / <: attach(hbargraph("[101]gradient %n",-.5,.5)));
 };
