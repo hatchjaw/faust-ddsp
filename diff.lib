@@ -1,6 +1,7 @@
 si = library("signals.lib");
 ba = library("basics.lib");
 ro = library("routes.lib");
+an = library("analyzers.lib");
 df = library("diff.lib");
 
 // Differentiable primitives.
@@ -31,6 +32,7 @@ diff(+,nvars) =
     }
     : +,par(n, nvars, +);
 
+// Differentiable subtraction.
 // <u, u'> - <v, v'> = <u-v, u'-v'>
 diff(-,nvars) =
     route(nIN,nOUT,
@@ -137,6 +139,13 @@ input(nvars) = _,par(n,nvars,0);
 // A differentiable constant. Similar to an input.
 const(val,nvars) = val,par(n,nvars,0);
 
+// A friendly way of handling a differentiable recursion.
+// ngrads is the number of inputs available for passing in gradients.
+rec(F~G,ngrads) = (G,si.bus(n):F)~si.bus(m)
+with {
+    n = inputs(F)-outputs(G);
+    m = inputs(G)-ngrads;
+};
 
 // p = hslider("p",1,0,10,1);
 // q = -~_;
@@ -182,7 +191,7 @@ learnN(windowSize, learningRate, ntrain, nvars) =
     // Window the input signals
     par(i,ntrain+1+nvars,window)
     // Calculate the difference between each training example and the learned output...
-    : route(ntrain+1,2*ntrain,par(n,ntrain,(n+1,2*n+2),(ntrain+1,2*n+1))),si.bus(nvars) 
+    : route(ntrain+1,2*ntrain,par(n,ntrain,(n+1,2*n+2),(ntrain+1,2*n+1))),si.bus(nvars)
     : par(n,ntrain,-),si.bus(nvars)
     // Take the mean
     : (ba.parallelMean(ntrain) <: attach(hbargraph("mean delta",-1,1))),si.bus(nvars)
@@ -199,7 +208,7 @@ with {
     // A way to move the partial derivatives around.
     pds = si.bus(nvars);
     // Calculate gradients; for L1 norm: dy/dx_i * (learnable - groundtruth) / abs(learnable - groundtruth)
-    gradients = route(nvars+1,nvars+3,(1,1),par(n,nvars,(1,n*2+3),(n+2,2*n+2)))
+    gradients = route(nvars+1,2*nvars+1,(1,1),par(n,nvars,(1,n*2+3),(n+2,2*n+2)))
         : (abs,1e-10 : max),par(n,nvars, *)
         : route(nvars+1,nvars*2,par(n,nvars,(1,2*n+2),(n+2,2*n+1)))
         : par(n,nvars, / <: attach(hbargraph("[101]gradient %n",-.5,.5)));
