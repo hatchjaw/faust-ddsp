@@ -15,7 +15,7 @@ with {
 };
 
 process = in,in
-    : hgroup("Differentiable lowpass",
+    : hgroup("Differentiable delay",
         (route(NVARS+2,NVARS+2,par(n,NVARS,(n+1,n+3)),(NVARS+1,1),(NVARS+2,2))
         : vgroup("[0]Parameters", vgroup("Hidden", truth),vgroup("Learned", learnable))
         : route(2+NVARS,4+NVARS,
