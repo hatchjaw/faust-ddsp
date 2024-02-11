@@ -159,8 +159,8 @@ diff(@,nvars) =
     }
     : _,par(n,nvars,d,_,_ : _,* : -)
 with {
-    // d = @;
-    d = de.fdelay(MAXDELAY);
+    d = @;
+    // d = de.fdelay(MAXDELAY);
     MAXDELAY = 1<<24;
 };
 
