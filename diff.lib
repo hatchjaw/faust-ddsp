@@ -2,6 +2,8 @@ si = library("signals.lib");
 ba = library("basics.lib");
 ro = library("routes.lib");
 an = library("analyzers.lib");
+ma = library("maths.lib");
+de = library("delays.lib");
 df = library("diff.lib");
 
 // Differentiable primitives.
@@ -120,8 +122,47 @@ diff(tan,nvars) = route(nvars+1,2*nvars+1,(1,1),par(n,nvars,(1,2*(n+1)+1),(n+2,2
     : tan,par(n,nvars, _,((cos <: *),1e-10 : max) : /);
 
 // Differentiable one-sample delay
-// <u, u'> = <u[n-1], u'[n-1]>
+// <u, u'>[n-1] = <u[n-1], u'[n-1]>
 diff(mem,nvars) = mem,par(n,nvars,mem);
+
+// Int cast... should be nonzero for sin(pi*x) == 0
+// int(<u, u'>) = <int(u), 0>
+diff(int,nvars) = int,par(n,nvars,_ <: _,int : ==);
+
+// Differentiable delay
+// <u, u'>[n-<v, v'>] = <u[n-v], u'[n-v] - v' * (u[n-v])'_n>
+//                    = u@v,u'@v,v',(u@v)'_n : _,_,* : _,-;
+diff(@,nvars) =
+    route(nIN,nOUT,
+        (u,1),(v,2), // u, v
+        (v,nvars+3), // v
+        par(n,nvars,(u+n+1,u+n+2),(v+n+1,v+n+2))) // u', v'
+    with {
+        nIN = 2 + 2*nvars;
+        nOUT = nIN + 1;
+        u = 1;
+        v = 1 + nvars + 1;
+    }
+    : (d <: _,_,_' : _,-),si.bus(2*nvars+1) // u[n-v], (u[n-v])' <= SHOULD BE CENTRE DIFF?
+    : _,route(nIN,nOUT,
+        par(n,nvars,
+            (1,n*4+3),
+            (u+n+1,n*4+1),(v,n*4+2), // u'[n-v]
+            (v+n+1,4*n+4) // v'
+        )
+    )
+    with {
+        nIN = 2 + 2*nvars;
+        nOUT = 4*nvars;
+        u = 1;
+        v = 1 + nvars + 1;
+    }
+    : _,par(n,nvars,d,_,_ : _,* : -)
+with {
+    // d = @;
+    d = de.fdelay(MAXDELAY);
+    MAXDELAY = 1<<24;
+};
 
 //===========================================================================
 
@@ -129,14 +170,16 @@ diff(mem,nvars) = mem,par(n,nvars,mem);
 
 // A differentiable variable.
 // Returns a list containing the variable and a vector of its partial derivatives.
-// [ xi, dxi/dx1, dxi/dx2, ... , dxi/dxN ]q
-var(i,var,nvars) = var,par(n,nvars,n+1==i); // v,diff(v);
+// [ xi, dxi/dx1, dxi/dx2, ... , dxi/dxN ]
+var(i,var,nvars) = var,par(n,nvars,n+1==i);
 
 // A differentiable (audio) input.
 // Returns the input, plus its partial derivatives wrt all variables in the system, which are all zero.
+// <x, x'> = <x, 0>
 input(nvars) = _,par(n,nvars,0);
 
 // A differentiable constant. Similar to an input.
+// <x, x'> = <x, 0>
 const(val,nvars) = val,par(n,nvars,0);
 
 // A friendly way of handling a differentiable recursion.
@@ -151,6 +194,16 @@ with {
 // q = -~_;
 // process = (df.diff(+,NVARS),_) ~ (route(3,3,(3,1),(2,3),(1,2)) : df.var(1,q,NVARS),df.diff(_,NVARS) : df.diff(*,NVARS)) : _,_,!;
 
+phasor(f0,nvars) = f0,const(ma.SR,nvars)
+    : diff(/,nvars)
+    : rec(f~g,0),const(2*ma.PI,nvars)
+    : diff(*,nvars)
+    with {
+        f = diff(+,nvars) <: diff(_,nvars),diff(int,nvars) : diff(-,nvars);
+        g = diff(_,nvars);
+    };
+
+osc(f0,nvars) = phasor(f0,nvars) : diff(sin,nvars);
 
 //===========================================================================
 
@@ -182,6 +235,32 @@ with {
     // A utility to duplicate the first input for combination with all remaining inputs.
     routeall = _,si.bus(nvars)
         : route(nvars+1,nvars*2,par(n,nvars,(1,2*n+1),(n+2,2*(n+1))));
+};
+
+learnL2 = learn;
+
+learnL1(windowSize, learningRate, nvars) =
+    // Window the input signals
+    par(i,2+nvars,window)
+    // Calculate the difference between the ground truth and learnable outputs
+    : (ro.cross(2) : - ),pds
+    // Calculate loss (this is just for show, since there's no sensitivity threshold)
+    : (_ <: loss,_),pds
+    // Calculate gradients
+    : _,gradients
+    // Scale gradients by the learning rate
+    : _,par(n,nvars,_,learningRate : *)
+with {
+    window = ba.slidingMean(windowSize);
+    // Loss function (L1 norm)
+    loss = abs <: attach(hbargraph("[100]loss",0.,.05));
+    // A way to move the partial derivatives around.
+    pds = si.bus(nvars);
+    // Calculate gradients; for L1 norm: dy/dx_i * (learnable - groundtruth) / abs(learnable - groundtruth)
+    gradients = route(nvars+1,2*nvars+1,(1,1),par(n,nvars,(1,n*2+3),(n+2,2*n+2)))
+        : (abs,1e-10 : max),par(n,nvars, *)
+        : route(nvars+1,nvars*2,par(n,nvars,(1,2*n+2),(n+2,2*n+1)))
+        : par(n,nvars, / <: attach(hbargraph("[101]gradient %n",-.5,.5)));
 };
 
 // As above but takes batches of ground truth input.
