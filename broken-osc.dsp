@@ -29,11 +29,11 @@ process = hgroup("Differentiable oscillator",
             // Route gradients to df.learn.
             par(n,NVARS,(n+3,n+3))
         )
-        : vgroup("[1]Loss/gradient", df.learn(1<<0,1e-4,NVARS),_,_)) ~ (!,si.bus(NVARS))
+        : vgroup("[1]Loss/gradient", df.learn(1<<0,hslider("alpha [scale:log]",1e-4,1e-6,1e-1,1e-8),NVARS),_,_)) ~ (!,si.bus(NVARS))
     // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
-    : _,si.block(NVARS),!,!
+    : _,si.block(NVARS),!,! : _,1,.5 : -,_ : *
 with {
-    truth = os.osc(hslider("freq", 1000.,50.,10000.,.01));
+    truth = os.osc(hslider("freq [scale:log]", 1000.,50.,10000.,.01));
 
     learnable = osc(df.var(1,f0,NVARS),NVARS)
     with {
