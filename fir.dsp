@@ -1,7 +1,7 @@
 import("stdfaust.lib");
 df = library("diff.lib");
 
-NTAPS = 10;
+NTAPS = 8;
 
 o = _,1,_',2,_'',3,_''',4 : par(i,4,*) : par(i,2,+),par(i,0,_) : +;
 
@@ -39,7 +39,7 @@ with{
 
     truth = _ <: sum(n, NTAPS, _,n : @,bn : *
         with {
-            bn = hslider("b%n", 0., -1., 1., .001);
+            bn = hslider("b%n", sin(n), -1., 1., .001);
         });
 
     learnable = route(1+NTAPS,NTAPS*2,par(n,NTAPS,(1,2*n+1),(n+2,2*n+2))) :
