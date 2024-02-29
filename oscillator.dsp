@@ -27,11 +27,11 @@ process = hgroup("Differentiable oscillator",
             // Route gradients to df.learn.
             par(n,NVARS,(n+3,n+3))
         )
-        : vgroup("[1]Loss/gradient", learn(1<<0,1e-5,NVARS),_,_)) ~ (!,si.bus(NVARS))
+        : vgroup("[1]Loss/gradient", df.learnL1(1<<0,5e-6,NVARS),_,_)) ~ (!,si.bus(NVARS))
     // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
-    : _,si.block(NVARS),_,_
+    : _,si.block(NVARS),!,_
 with {
-    hiddenF0 = hslider("freq [scale:log]", 440.,50.,10000.,.01);
+    hiddenF0 = hslider("freq [scale:log]", 440.,50.,1000.,.01);
     // truth = os.osc(hiddenF0);
 
     truth = phasor(hiddenF0) : sin
@@ -48,7 +48,7 @@ with {
             : (_,1.,mid : +,_ : (*,mini : +))
             <: attach(hbargraph("[1]Frequency [scale:log]", mini, maxi))
         with {
-            maxi = 10000.;
+            maxi = 1000.;
             mini = 50.;
             mid = maxi,mini,2 : +,_ : /;
         };

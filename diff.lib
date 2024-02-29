@@ -130,37 +130,45 @@ diff(mem,nvars) = mem,par(n,nvars,mem);
 diff(int,nvars) = int,par(n,nvars,_ <: _,int : ==);
 
 // Differentiable delay
+// Only really works for delays that increase because it's asymmetrical in time.
+// Still, it's useful as a component in differentiable algorithms that feature
+// fixed delays.
+//
 // <u, u'>[n-<v, v'>] = <u[n-v], u'[n-v] - v' * (u[n-v])'_n>
 //                    = u@v,u'@v,v',(u@v)'_n : _,_,* : _,-;
 diff(@,nvars) =
     route(nIN,nOUT,
         (u,1),(v,2), // u, v
-        (v,nvars+3), // v
-        par(n,nvars,(u+n+1,u+n+2),(v+n+1,v+n+2))) // u', v'
+        // (v,nvars+3), // v
+        par(n,nvars,
+            (u+n+1,2*n+3),(v,2*n+4), // u'[n-v]
+            (v+n+1,v+n+1+nvars) // v'
+        ))
     with {
         nIN = 2 + 2*nvars;
-        nOUT = nIN + 1;
+        nOUT = nIN + nvars;
         u = 1;
         v = 1 + nvars + 1;
     }
-    : (d <: _,_,_' : _,-),si.bus(2*nvars+1) // u[n-v], (u[n-v])' <= SHOULD BE CENTRE DIFF?
+    : duv_dn,par(n,nvars,delay),si.bus(nvars) // u[n-v], (u[n-v])'_n, u'[n-v], v'
     : _,route(nIN,nOUT,
         par(n,nvars,
-            (1,n*4+3),
-            (u+n+1,n*4+1),(v,n*4+2), // u'[n-v]
-            (v+n+1,4*n+4) // v'
+            (1,n*3+3),
+            (du+n,n*3+1),
+            (dv+n,n*3+2)
         )
     )
     with {
-        nIN = 2 + 2*nvars;
-        nOUT = 4*nvars;
-        u = 1;
-        v = 1 + nvars + 1;
+        nIN = 1 + 2*nvars;
+        nOUT = nIN + nvars - 1;
+        du = 2;
+        dv = nvars + 2;
     }
-    : _,par(n,nvars,d,_,_ : _,* : -)
+    : _,par(n,nvars, _,* : -)
 with {
-    d = @;
-    // d = de.fdelay(MAXDELAY);
+    duv_dn = (delay <: _,_,_' : _,-); // <= SHOULD BE CENTRE DIFF SOMEHOW?
+    delay = @;
+    // delay = de.fdelay(MAXDELAY);
     MAXDELAY = 1<<24;
 };
 
@@ -208,7 +216,6 @@ osc(f0,nvars) = phasor(f0,nvars) : diff(sin,nvars);
 //===========================================================================
 
 // Stochastic gradient descent with time-domain L2 norm loss function
-
 learn(windowSize, learningRate, nvars) =
     // Window the input signals
     par(i,2+nvars,window)
@@ -239,6 +246,7 @@ with {
 
 learnL2 = learn;
 
+// L1 norm
 learnL1(windowSize, learningRate, nvars) =
     // Window the input signals
     par(i,2+nvars,window)
@@ -265,7 +273,6 @@ with {
 
 // As above but takes batches of ground truth input.
 // Needs work...
-
 learnN(windowSize, learningRate, ntrain, nvars) =
     // Window the input signals
     par(i,ntrain+1+nvars,window)

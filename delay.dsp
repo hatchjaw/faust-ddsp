@@ -4,6 +4,8 @@ df = library("diff.lib");
 NVARS = 2;
 MAXDELAY = 100;
 
+q = df.input(NVARS),df.const(2,NVARS) : df.diff(@,NVARS);
+
 process = p;
 
 //=====================================================================================
@@ -33,11 +35,11 @@ p = in,in
             // Route gradients to df.learn.
             par(n,NVARS,(n+3,n+3))
         )
-        : vgroup("[1]Loss/gradient", learn(1<<2,1e-1,NVARS),_,_)) ~ (!,si.bus(NVARS))
+        : vgroup("[1]Loss/gradient", learn(1<<3,2e-1,NVARS),_,_)) ~ (!,si.bus(NVARS))
     // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
-    ) : _,si.bus(NVARS),_,_
+    ) : _,si.block(NVARS),_,_
 with {
-    in = no.noise;
+    in = no.noise; //os.osc(1000);
 
     hiddenDelay = hslider("Delay", 10, 0, MAXDELAY, 1);
     hiddenGain = hslider("Gain", .5, 0., 2., .01);
@@ -82,4 +84,4 @@ with {
         routeall = _,si.bus(nvars)
             : route(nvars+1,nvars*2,par(n,nvars,(1,2*n+1),(n+2,2*(n+1))));
     };
-};PUd
+};

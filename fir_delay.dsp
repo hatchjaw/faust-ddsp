@@ -22,8 +22,8 @@ with{
     in = no.noise;
 
     // Impulse response version...
-    hiddenDelay1 = hslider("Delay1", 2, 0, NTAPS-1, 1);
-    hiddenDelay2 = hslider("Delay2", 8, 0, NTAPS-1, 1);
+    hiddenDelay1 = hslider("Delay1", (2,(NTAPS-1) : min), 0, NTAPS-1, 1);
+    hiddenDelay2 = hslider("Delay2", (8,(NTAPS-1) : min), 0, NTAPS-1, 1);
 
     truth = _ <: _,hiddenDelay1,_,hiddenDelay2 : @,@ : +;
 

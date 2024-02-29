@@ -4,6 +4,7 @@ df = library("diff.lib");
 // This is completely broken, but sounds amazing
 
 NVARS = 1;
+MAXFREQ = 5000.;
 
 p = df.osc(f0,NVARS)
 with {
@@ -29,11 +30,11 @@ process = hgroup("Differentiable oscillator",
             // Route gradients to df.learn.
             par(n,NVARS,(n+3,n+3))
         )
-        : vgroup("[1]Loss/gradient", df.learn(1<<0,hslider("alpha [scale:log]",1e-4,1e-6,1e-1,1e-8),NVARS),_,_)) ~ (!,si.bus(NVARS))
-    // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
-    : _,si.block(NVARS),!,! : _,1,.5 : -,_ : *
+        : vgroup("[1]Loss/gradient", learn(1<<0,hslider("alpha [scale:log]",1e-4,1e-8,1e-1,1e-8),NVARS),_,_)) ~ (!,si.bus(NVARS))
+    // Listen to the loss.
+    : _,si.block(NVARS),!,! <: _,_
 with {
-    truth = os.osc(hslider("freq [scale:log]", 1000.,50.,10000.,.01));
+    truth = os.triangle(hslider("freq [scale:log]", 500.,50.,MAXFREQ,.01));
 
     learnable = osc(df.var(1,f0,NVARS),NVARS)
     with {
@@ -43,7 +44,7 @@ with {
             : (_,1.,mid : +,_ : (*,mini : +))
             <: attach(hbargraph("[1]Frequency [scale:log]", mini, maxi))
         with {
-            maxi = 10000.;
+            maxi = MAXFREQ;
             mini = 50.;
             mid = maxi,mini,2 : +,_ : /;
         };
@@ -59,4 +60,32 @@ with {
         };
 
     osc(f0,nvars) = phasor(f0,nvars) : df.diff(sin,nvars);
+
+    learn(windowSize, learningRate, nvars) =
+        // Window the input signals
+        par(i,2+nvars,window)
+        // Calculate the difference between the ground truth and learnable outputs
+        // (Is cross necessary?)
+        : (ro.cross(2) : - ),pds
+        // Calculate loss (this is just for show, since there's no sensitivity threshold)
+        : (_ <: loss,_),pds
+        // Calculate gradients
+        : _,gradients
+        // Scale gradients by the learning rate
+        : _,par(n,nvars,_,learningRate : *)
+    with {
+        window = ba.slidingMean(windowSize);
+        // "Loss" is just the difference between "truth" and learnable output
+        loss = _ <: attach(hbargraph("[100]loss",0,.05));
+        // A way to move the partial derivatives around.
+        pds = si.bus(nvars);
+        // Calculate gradients; for L2 norm: 2 * dy/dx_i * (learnable - groundtruth)
+        gradients = _,par(n,nvars, _,2 : *)
+            : routeall
+            : par(n,nvars, * <: attach(hbargraph("[101]gradient %n",-.5,.5)));
+
+        // A utility to duplicate the first input for combination with all remaining inputs.
+        routeall = _,si.bus(nvars)
+            : route(nvars+1,nvars*2,par(n,nvars,(1,2*n+1),(n+2,2*(n+1))));
+    };
 };
