@@ -26,10 +26,6 @@ DDSP has emerged as a key component in machine learning approaches to
 problems such as source separation, timbre transfer, parameter estimation, etc.
 DDSP is reliant on a programming language with a supporting framework for
 automatic differentiation.
-In Python, this is provided by libraries such as TensorFlow and JAX;
-other languages,
-[Swift](https://github.com/apple/swift/blob/main/docs/DifferentiableProgramming.md)
-for example, may feature native support.
 
 ## DDSP in Faust
 
@@ -42,9 +38,9 @@ derivatives of the primitive operations in our program.
 
 Let's consider the example of the addition primitive; in Faust one can write:
 
+```faust
+process = +;
 ```
-faust process = +;
-```   
 
 which yields the block diagram:
 
@@ -76,9 +72,9 @@ variable of interest.
 
 In Faust, we could express this fact as follows:
 
-```faust 
-process = +,+; 
-```   
+```faust
+process = +,+;
+```
 
 ![](./images/dualadd.svg)
 
