@@ -126,6 +126,16 @@ with {
         : sin,par(n,nvars, _,cos : *);
 };
 
+// Differentiable cosine function
+// Takes a dual number as input;
+// Returns the cosine of the input, and its derivative.
+// cos(<u, u'>) = <cos(u), -u'*sin(u)>
+diff(cos,nvars) = diffcos
+with {
+    diffcos = route(nvars+1,2*nvars+1,(1,1),par(n,nvars,(1,2*(n+1)+1),(n+2,2*(n+1))))
+        : cos,par(n,nvars, _,sin : *,-1 : *);
+};
+
 // tan(<u, u'>) = <tan(u), u'/cos^2(u)>
 diff(tan,nvars) = difftan
 with {
