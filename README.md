@@ -9,33 +9,33 @@ DDSP experiments in Faust.
 
 ## What is DDSP?
 
-Differentiable programming is a technique whereby a program can be    
-differentiated with respect to its inputs, permitting the computation of the    
-sensitivity of the program's outputs to changes in its inputs.    
-Partial derivatives of a program can be found analytically via    
-[automatic differentiation](https://en.wikipedia.org/wiki/Automatic_differentiation)    
-and, coupled with an appropriate loss function, used to perform gradient    
-descent.    
-Differentiable programming has consequently become a key tool in solving machine    
+Differentiable programming is a technique whereby a program can be
+differentiated with respect to its inputs, permitting the computation of the
+sensitivity of the program's outputs to changes in its inputs.
+Partial derivatives of a program can be found analytically via
+[automatic differentiation](https://en.wikipedia.org/wiki/Automatic_differentiation)
+and, coupled with an appropriate loss function, used to perform gradient
+descent.
+Differentiable programming has consequently become a key tool in solving machine
 learning problems.
 
 **Differentiable digital signal processing**
-([DDSP](https://intro2ddsp.github.io/background/what-is-ddsp.html)) is the    
-specific application of differentiable programming to audio tasks.    
-DDSP has emerged as a key component in machine learning approaches to    
-problems such as source separation, timbre transfer, parameter estimation, etc.    
-DDSP is reliant on a programming language with a supporting framework for    
-automatic differentiation.    
-In Python, this is provided by libraries such as TensorFlow and JAX;    
-other languages,    
-[Swift](https://github.com/apple/swift/blob/main/docs/DifferentiableProgramming.md)    
+([DDSP](https://intro2ddsp.github.io/background/what-is-ddsp.html)) is the
+specific application of differentiable programming to audio tasks.
+DDSP has emerged as a key component in machine learning approaches to
+problems such as source separation, timbre transfer, parameter estimation, etc.
+DDSP is reliant on a programming language with a supporting framework for
+automatic differentiation.
+In Python, this is provided by libraries such as TensorFlow and JAX;
+other languages,
+[Swift](https://github.com/apple/swift/blob/main/docs/DifferentiableProgramming.md)
 for example, may feature native support.
 
 ## DDSP in Faust
 
 > Trigger warning: some basic calculus will follow
 
-To write automatically differentiable code we need analytic expressions for the    
+To write automatically differentiable code we need analytic expressions for the
 derivatives of the primitive operations in our program.
 
 ### A Differentiable Primitive
@@ -55,23 +55,23 @@ the sum of two input signals, $u$ and $v$.
 
 $$y = u + v.$$
 
-Bear in mind that the addition primitive doesn't *know* anything about its     
-arguments, their origin, provenance, etc., it just consumes them and returns   
-their sum.  
-In Faust's *algebra*, the addition of two signals (and just about *everything* 
-in Faust is a signal) is well-defined, and that's that.  
+Bear in mind that the addition primitive doesn't *know* anything about its
+arguments, their origin, provenance, etc., it just consumes them and returns
+their sum.
+In Faust's *algebra*, the addition of two signals (and just about *everything*
+in Faust is a signal) is well-defined, and that's that.
 This idea will be important later.
 
-Now, say $y$ is dependent on some variable $x$, and we wish to know how     
-sensitive $y$ is to changes in $x$, then we should differentiate $y$ with     
+Now, say $y$ is dependent on some variable $x$, and we wish to know how
+sensitive $y$ is to changes in $x$, then we should differentiate $y$ with
 respect to $x$:
 
-$$     
-\frac{dy}{dx} = \frac{d}{dx}\left(u + v\right) = \frac{du}{dx} + \frac{dv}{dx}.    
+$$
+\frac{dy}{dx} = \frac{d}{dx}\left(u + v\right) = \frac{du}{dx} + \frac{dv}{dx}.
 $$
 
-It happens that the derivative of an addition is also an addition, except this     
-time an addition of the derivatives of the arguments with respect to the   
+It happens that the derivative of an addition is also an addition, except this
+time an addition of the derivatives of the arguments with respect to the
 variable of interest.
 
 In Faust, we could express this fact as follows:
@@ -82,31 +82,31 @@ process = +,+;
 
 ![](./images/dualadd.svg)
 
-If we did, we'd be describing, in parallel, $y$ and $\frac{dy}{dx}$, which we    
+If we did, we'd be describing, in parallel, $y$ and $\frac{dy}{dx}$, which we
 could write as:
 
-$$    
-\begin{align*}    
-\langle y, \frac{dy}{dx} \rangle     
-&= \langle u, \frac{du}{dx} \rangle + \langle v, \frac{dv}{dx} \rangle \\  
+$$
+\begin{align*}
+\langle y, \frac{dy}{dx} \rangle
+&= \langle u, \frac{du}{dx} \rangle + \langle v, \frac{dv}{dx} \rangle \\
 &= \langle u + v, \frac{du}{dx} + \frac{dv}{dx} \rangle.
 \end{align*}
 $$
 
-This is a [*dual number*](https://en.wikipedia.org/wiki/Dual_number)  
-representation, or more accurately, since we're working with Faust, a *dual  
-signal* representation.  
-Being able to pass around our algorithm and its derivative in parallel, as dual  
-signals, is pretty handy, as we'll see later.  
+This is a [*dual number*](https://en.wikipedia.org/wiki/Dual_number)
+representation, or more accurately, since we're working with Faust, a *dual
+signal* representation.
+Being able to pass around our algorithm and its derivative in parallel, as dual
+signals, is pretty handy, as we'll see later.
 Anyway, what we've just defined is a *differentiable addition primitive*.
 
 ### But where exactly is the derivative?
 
-Just as the addition primitive has no knowledge of its input signals, nor does    
-its differentiable counterpart.    
-The differentiable primitive promises the following: "give me $u$ and $v$, and     
-$\frac{du}{dx}$ and $\frac{dv}{dx}$ in that order, and I'll give you $y$ and   
-$\frac{dy}{dx}$".  
+Just as the addition primitive has no knowledge of its input signals, nor does
+its differentiable counterpart.
+The differentiable primitive promises the following: "give me $u$ and $v$, and
+$\frac{du}{dx}$ and $\frac{dv}{dx}$ in that order, and I'll give you $y$ and
+$\frac{dy}{dx}$".
 So let's do just that.
 For $u$ we'll use an arbitrary input signal, which we can represent with a wire,
 `_`.
@@ -119,12 +119,12 @@ $v$ *is* $x$, so $\frac{dv}{dx}$ is $1$.
 in a machine learning implementation &mdash; a *learnable parameter* is more 
 like a bargraph. We'll get to that [later](#blahblah).
 
-```faust  
-x = hslider("x", 0, -1, 1, .1);  
-u = _;  
-v = x;  
-dudx = 0;  
-dvdx = 1;  
+```faust
+x = hslider("x", 0, -1, 1, .1);
+u = _;
+v = x;
+dudx = 0;
+dvdx = 1;
 process = u,v,dudx,dvdx : +,+;
 ```
 
@@ -132,20 +132,20 @@ process = u,v,dudx,dvdx : +,+;
 
 The first output of this program is the result of an expression describing an
 input signal with a DC offset $x$ applied;
-the second output is the derivative of that expression, a constant signal of 
+the second output is the derivative of that expression, a constant signal of
 value $1$.
 So far so good, but it's not very *automatic*.
 
 ### More Differentiable Primitives
 
-We can generalise things a bit by defining a *differentiable input*[^2] and a 
+We can generalise things a bit by defining a *differentiable input*[^2] and a
 *differentiable slider*:
 
-[^2]: An input isn't strictly a Faust primitive. 
-In fact, syntactically, what we're calling an *input* here is indistinguishable 
+[^2]: An input isn't strictly a Faust primitive.
+In fact, syntactically, what we're calling an *input* here is indistinguishable
 from Faust's identity function, or *wire* (`_`), the derivative of which is also
-a wire. 
-We need a distinct expression for an arbitrary signal &mdash; mic input, a 
+a wire.
+We need a distinct expression for an arbitrary signal &mdash; mic input, a
 soundfile, etc. &mdash; we know to be entering our program *from outside*, as it
 were, and for which we have, in principle, no way of describing analytically.
 
@@ -193,10 +193,10 @@ $$
 y = uv + w, \quad v = x_1, \quad w = x_2.
 $$
 
-$u$ will again be an arbitrary input signal, for which we have no analytic 
+$u$ will again be an arbitrary input signal, for which we have no analytic
 expression.
 
-Now, rather than being a lone ordinary derivative $\frac{dy}{dx}$, the 
+Now, rather than being a lone ordinary derivative $\frac{dy}{dx}$, the
 derivative of $y$, $y'$, is a vector of *partial derivatives*:
 
 $$
@@ -209,8 +209,8 @@ of differentiation, we have:
 
 $$
 \begin{align*}
-\langle y,y' \rangle &= 
-    \langle u,u' \rangle \langle v,v' \rangle + \langle w,w' \rangle \\ 
+\langle y,y' \rangle &=
+    \langle u,u' \rangle \langle v,v' \rangle + \langle w,w' \rangle \\
                      &= \langle uv,u'v + v'u \rangle + \langle w,w' \rangle \\
                      &= \langle uv + w,u'v + v'u + w'\rangle,
 \end{align*}
