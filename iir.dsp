@@ -18,26 +18,18 @@ p = in,in
             // Route gradients to df.learn.
             par(n,NVARS,(n+3,n+3))
         )
-        : vgroup("[1]Loss/gradient", df.learnL2(1<<3,2e-1,NVARS),_,_)) ~ (!,si.bus(NVARS))
+        : vgroup("[1]Loss/gradient", df.learnL2(1<<3,1e-1,NVARS),_,_)) ~ (!,si.bus(NVARS))
     // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
     ) : _,si.block(NVARS),_,_
 with{
     in = no.noise;
-
-    // truth = _ <: sum(n, NTAPS, _,n : @,bn : *
-    //     with {
-    //         bn = hslider("[0]b%n", n==0, -1., 1., .001);
-    //     }) : + ~ (_ <: sum(n, NTAPS-1, _,n : @,an : *
-    //     with {
-    //         m = n+1;
-    //         an = hslider("[1]a%m", 0, -1., 1., .001);
-    //     }));
 
     truth = f : +~g
     with {
         f = bank(NTAPS,0);
         g = bank(NTAPS-1,1);
 
+        bank(0,isA) = 0;
         bank(N,isA) = _ <: sum(n, N, _,n : @,coeff : *
             with {
                 m = n+isA;
@@ -45,25 +37,38 @@ with{
             });
     };
 
-    learnable = df.input(NVARS),si.bus(NVARS)
+    learnable = df.input(NVARS),si.bus(NVARS) // A differentiable input, NVARS gradients
+        // FIR bank, gradients for g
         : f,si.bus(NTAPS-1)
-        : route(NVARS+NTAPS,NVARS+NTAPS,
+        : route(nIN, nIN,
+            // Output and partial derivatives to h
             par(n,NVARS+1,(n+1,n+1+NTAPS-1)),
+            // Gradients to g
             par(n,NTAPS-1,(NVARS+n+2,n+1)))
+        with {
+            nIN = 1+NVARS+NTAPS-1; // 1 output + NVARS partial derivatives + NTAPS-1 gradients
+        }
+        // Sum ~ IIR bank
         : df.rec(h~g,NTAPS-1)
         with {
-            f = bank(NTAPS,0,0) : sumall(NTAPS);
-            g = bank(NTAPS-1,NTAPS,1) : sumall(NTAPS-1);
+            f = bank(NTAPS,0,0);
+            g = bank(NTAPS-1,NTAPS,1);
             h = df.diff(+,NVARS);
 
             sumall(1) = df.diff(_,NVARS);
             sumall(2) = df.diff(+,NVARS);
             sumall(N) = seq(n,N-2,df.diff(+,NVARS),par(m,N-n-2,df.diff(_,NVARS))) : sumall(2);
 
+            // N:      number of filter taps
+            // offset: offset for the index of the differentiable parameter
+            // isA:    is this a feedforward (0) or a feedback (1) tap?
+            bank(0,offest,isA) = df.const(0,NVARS);
             bank(N,offset,isA) =
                 route(NVARS+N+1,N*NVARS+2*N,
                     par(n,N,
+                        // Partial derivatives to differentiable delay
                         par(m,NVARS+1,(m+1,(m+1)+n*(NVARS+2))),
+                        // Gradients to filter coefficients
                         (NVARS+n+2,(NVARS+2)*(n+1))
                     )
                 ) : par(n, N,
@@ -74,7 +79,7 @@ with{
                         m = n+isA;
                         coeff = -~_ <: attach((isA,hbargraph("[0]b%m",-1,1),hbargraph("[1]a%m",-1,1)) : select2);
                     }
-                );
+                ) : sumall(N);
         };
 };
 
