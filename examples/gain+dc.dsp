@@ -1,6 +1,6 @@
 
 import("stdfaust.lib");
-df = library("diff.lib");
+df = library("../lib/diff.lib");
 
 hiddenGain = hslider("[0]Hidden gain", .5, 0, 2, .01);
 hiddenDC = hslider("[1]Hidden dc", .5, -1, 1, .01);
