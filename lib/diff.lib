@@ -28,338 +28,12 @@ with{
         )
     )
     with {
-        nIN = 2 + 2*nvars;
+        nIN = 2+2*nvars;
         nOUT = nIN;
         u = 1;
-        v = 1 + nvars + 1;
+        v = u+nvars+1;
     }
-    : +,par(i, nvars, +);si = library("signals.lib");
-ba = library("basics.lib");
-ro = library("routes.lib");
-an = library("analyzers.lib");
-ma = library("maths.lib");
-de = library("delays.lib");
-df = library("diff.lib");
-
-// Differentiable primitives.
-
-// Derivative of the identity function.
-// Returns n+1 parallel identity functions, where n is the number of variables.
-diff(_,nvars) = si.bus(nvars+1);
-
-// Differentiable addition.
-// Takes two dual numbers as input;
-// returns the sum and its derivative.
-// <u, u'> + <v, v'> = <u+v, u'+v'>
-diff(+,nvars) = diffadd
-with{
-    diffadd = route(nIN,nOUT,
-        (u,1),(v,2), // u + v
-        par(n,nvars,
-            (u+n+1,dx),(v+n+1,dx+1) // du/dx_i + dv/dx_i
-            with {
-                dx = 2*n+3; // Start of derivatives wrt ith var
-            }
-        )
-    )
-    with {
-        nIN = 2 + 2*nvars;
-        nOUT = nIN;
-        u = 1;
-        v = 1 + nvars + 1;
-    }
-    : +,par(n, nvars, +);
-};
-
-// Differentiable subtraction.
-// <u, u'> - <v, v'> = <u-v, u'-v'>
-diff(-,nvars) = diffsub
-with {
-    diffsub = route(nIN,nOUT,
-        (u,1),(v,2), // u + v
-        par(n,nvars,
-            (u+n+1,dx),(v+n+1,dx+1) // du/dx_n + dv/dx_n
-            with {
-                dx = 2*n+3; // Start of derivatives wrt nth var
-            }
-        )
-    )
-    with {
-        nIN = 2 + 2*nvars;
-        nOUT = nIN;
-        u = 1;
-        v = 1 + nvars + 1;
-    }
-    : -,par(n, nvars, -);
-};
-
-// Differentiable multiplication.
-// Takes two dual numbers as input;
-// returns the product and its derivative.
-// <u, u'> * <v, v'> = <u*v, u'*v + u*v'>
-diff(*,nvars) = diffmul
-with {
-    diffmul = route(nIN,nOUT,
-        (u,1),(v,2), // u * v
-        par(n,nvars,
-            (u,dx),(dvdx,dx+1),   // u * dv/dx_i
-            (dudx,dx+2),(v,dx+3)  // du/dx_i * v
-            with {
-                dx = 4*n+3; // Start of derivatives wrt ith var
-                dudx = u + n + 1;
-                dvdx = v + n + 1;
-            }
-        )
-    )
-    with {
-        nIN = 2 + 2*nvars;
-        nOUT = 2 + 4*nvars;
-        u = 1;
-        v = 1 + nvars + 1;
-    }
-    : *,par(n, nvars, *,* : +);
-};
-
-// Differentiable division.
-// Takes two dual numbers as input;
-// returns the quotient and its derivative.
-// <u, u'> / <v, v'> = <u*v, (u'*v - u*v') / v^2>
-diff(/,nvars) = diffdiv
-with {
-    diffdiv = route(nIN,nOUT,
-        (u,1),(v,2), // u / v
-        par(n,nvars,
-            (dudx,dx),(v,dx+1),   // u * dv/dx_i
-            (u,dx+2),(dvdx,dx+3)  // du/dx_i * v
-            with {
-                dx = 4*n+3; // Start of derivatives wrt ith var
-                dudx = u + n + 1;
-                dvdx = v + n + 1;
-            }
-        ),
-        (v,nOUT),(v,nOUT-1)       // v^2
-    )
-    with {
-        nIN = 2 + 2*nvars;
-        nOUT = 2 + 4*nvars + 2;
-        u = 1;
-        v = 1 + nvars + 1;
-    }
-    : /,(par(n, nvars, *,* : -),(*,1e-10 : max) // Prevent division by zero
-        // Divide all by v^2
-        : route(nvars+1,nvars*2,par(n,nvars,(nvars+1,2*n+2),(n+1,2*(n+1)-1)))
-        : par(n,nvars, /));
-};
-
-// Differentiable sine function
-// Takes a dual number as input;
-// Returns the sine of the input, and its derivative.
-// sin(<u, u'>) = <sin(u), u'*cos(u)>
-diff(sin,nvars) = diffsin
-with {
-    diffsin = route(nvars+1,2*nvars+1,(1,1),par(n,nvars,(1,2*(n+1)+1),(n+2,2*(n+1))))
-        : sin,par(n,nvars, _,cos : *);
-};
-
-// Differentiable cosine function
-// Takes a dual number as input;
-// Returns the cosine of the input, and its derivative.
-// cos(<u, u'>) = <cos(u), -u'*sin(u)>
-diff(cos,nvars) = diffcos
-with {
-    diffcos = route(nvars+1,2*nvars+1,(1,1),par(n,nvars,(1,2*(n+1)+1),(n+2,2*(n+1))))
-        : cos,par(n,nvars, _,sin : *,-1 : *);
-};
-
-// tan(<u, u'>) = <tan(u), u'/cos^2(u)>
-diff(tan,nvars) = difftan
-with {
-    difftan = route(nvars+1,2*nvars+1,(1,1),par(n,nvars,(1,2*(n+1)+1),(n+2,2*(n+1))))
-                             // Prevent division by zero
-        : tan,par(n,nvars, _,((cos <: *),1e-10 : max) : /);
-};
-
-// Differentiable one-sample delay
-// <u, u'>[n-1] = <u[n-1], u'[n-1]>
-diff(mem,nvars) = diffmem with{ diffmem = mem,par(n,nvars,mem); };
-
-// Int cast... should be nonzero for sin(pi*x) == 0
-// int(<u, u'>) = <int(u), 0>
-diff(int,nvars) = diffint with{ diffint = int,par(n,nvars,_ <: _,int : ==); };
-
-// Differentiable delay
-// Only really works for delays that increase because it's asymmetrical in time.
-// Still, it's useful as a component in differentiable algorithms that feature
-// fixed delays.
-//
-// <u, u'>[n-<v, v'>] = <u[n-v], u'[n-v] - v' * (u[n-v])'_n>
-//                    = u@v,u'@v,v',(u@v)'_n : _,_,* : _,-;
-diff(@,nvars) = diffdelay
-with {
-    diffdelay = route(nIN,nOUT,
-            (u,1),(v,2), // u, v
-            // (v,nvars+3), // v
-            par(n,nvars,
-                (u+n+1,2*n+3),(v,2*n+4), // u'[n-v]
-                (v+n+1,v+n+1+nvars) // v'
-            ))
-        with {
-            nIN = 2 + 2*nvars;
-            nOUT = nIN + nvars;
-            u = 1;
-            v = 1 + nvars + 1;
-        }
-        : duv_dn,par(n,nvars,delay),si.bus(nvars) // u[n-v], (u[n-v])'_n, u'[n-v], v'
-        : _,route(nIN,nOUT,
-            par(n,nvars,
-                (1,n*3+3),
-                (du+n,n*3+1),
-                (dv+n,n*3+2)
-            )
-        )
-        with {
-            nIN = 1 + 2*nvars;
-            nOUT = nIN + nvars - 1;
-            du = 2;
-            dv = nvars + 2;
-        }
-        : _,par(n,nvars, _,* : -)
-    with {
-        duv_dn = (delay <: _,_,_' : _,-); // <= SHOULD BE CENTRE DIFF SOMEHOW?
-        delay = @;
-        // delay = de.fdelay(MAXDELAY);
-        MAXDELAY = 1<<24;
-    };
-};
-
-//===========================================================================
-
-// Differentiable utilities
-
-// A differentiable variable.
-// Returns a list containing the variable and a vector of its partial derivatives.
-// [ xi, dxi/dx1, dxi/dx2, ... , dxi/dxN ]
-var(i,var,nvars) = var,par(n,nvars,n+1==i);
-
-// A differentiable (audio) input.
-// Returns the input, plus its partial derivatives wrt all variables in the system, which are all zero.
-// <x, x'> = <x, 0>
-input(nvars) = _,par(n,nvars,0);
-
-// A differentiable constant. Similar to an input.
-// <x, x'> = <x, 0>
-const(val,nvars) = val,par(n,nvars,0);
-
-// A friendly way of handling a differentiable recursion.
-// ngrads is the number of inputs available for passing in gradients.
-rec(F~G,ngrads) = (G,si.bus(n):F)~si.bus(m)
-with {
-    n = inputs(F)-outputs(G);
-    m = inputs(G)-ngrads;
-};
-
-// p = hslider("p",1,0,10,1);
-// q = -~_;
-// process = (df.diff(+,NVARS),_) ~ (route(3,3,(3,1),(2,3),(1,2)) : df.var(1,q,NVARS),df.diff(_,NVARS) : df.diff(*,NVARS)) : _,_,!;
-
-phasor(f0,nvars) = f0,const(ma.SR,nvars)
-    : diff(/,nvars)
-    : rec(f~g,0),const(2*ma.PI,nvars)
-    : diff(*,nvars)
-    with {
-        f = diff(+,nvars) <: diff(_,nvars),diff(int,nvars) : diff(-,nvars);
-        g = diff(_,nvars);
-    };
-
-osc(f0,nvars) = phasor(f0,nvars) : diff(sin,nvars);
-
-//===========================================================================
-
-// Stochastic gradient descent with time-domain L2 norm loss function
-learn(windowSize, learningRate, nvars) =
-    // Window the input signals
-    par(i,2+nvars,window)
-    // Calculate the difference between the ground truth and learnable outputs
-    // (Is cross necessary?)
-    : (ro.cross(2) : - ),pds
-    // Calculate loss (this is just for show, since there's no sensitivity threshold)
-    : (_ <: loss,_),pds
-    // Calculate gradients
-    : _,gradients
-    // Scale gradients by the learning rate
-    : _,par(n,nvars,_,learningRate : *)
-with {
-    window = ba.slidingMean(windowSize);
-    // Loss function (L2 norm)
-    loss = ^(2) <: attach(hbargraph("[100]loss",0,.05));
-    // A way to move the partial derivatives around.
-    pds = si.bus(nvars);
-    // Calculate gradients; for L2 norm: 2 * dy/dx_i * (learnable - groundtruth)
-    gradients = _,par(n,nvars, _,2 : *)
-        : routeall
-        : par(n,nvars, * <: attach(hbargraph("[101]gradient %n",-.5,.5)));
-
-    // A utility to duplicate the first input for combination with all remaining inputs.
-    routeall = _,si.bus(nvars)
-        : route(nvars+1,nvars*2,par(n,nvars,(1,2*n+1),(n+2,2*(n+1))));
-};
-
-learnL2 = learn;
-
-// L1 norm
-learnL1(windowSize, learningRate, nvars) =
-    // Window the input signals
-    par(i,2+nvars,window)
-    // Calculate the difference between the ground truth and learnable outputs
-    : (ro.cross(2) : - ),pds
-    // Calculate loss (this is just for show, since there's no sensitivity threshold)
-    : (_ <: loss,_),pds
-    // Calculate gradients
-    : _,gradients
-    // Scale gradients by the learning rate
-    : _,par(n,nvars,_,learningRate : *)
-with {
-    window = ba.slidingMean(windowSize);
-    // Loss function (L1 norm)
-    loss = abs <: attach(hbargraph("[100]loss",0.,.05));
-    // A way to move the partial derivatives around.
-    pds = si.bus(nvars);
-    // Calculate gradients; for L1 norm: dy/dx_i * (learnable - groundtruth) / abs(learnable - groundtruth)
-    gradients = route(nvars+1,2*nvars+1,(1,1),par(n,nvars,(1,n*2+3),(n+2,2*n+2)))
-        : (abs,1e-10 : max),par(n,nvars, *)
-        : route(nvars+1,nvars*2,par(n,nvars,(1,2*n+2),(n+2,2*n+1)))
-        : par(n,nvars, / <: attach(hbargraph("[101]gradient %n",-.5,.5)));
-};
-
-// As above but takes batches of ground truth input.
-// Needs work...
-learnN(windowSize, learningRate, ntrain, nvars) =
-    // Window the input signals
-    par(i,ntrain+1+nvars,window)
-    // Calculate the difference between each training example and the learned output...
-    : route(ntrain+1,2*ntrain,par(n,ntrain,(n+1,2*n+2),(ntrain+1,2*n+1))),si.bus(nvars)
-    : par(n,ntrain,-),si.bus(nvars)
-    // Take the mean
-    : (ba.parallelMean(ntrain) <: attach(hbargraph("mean delta",-1,1))),si.bus(nvars)
-    // Calculate loss
-    : (_ <: loss,_),pds
-    // And gradients
-    : _,gradients
-    // Scale gradients by the learning rate
-    : _,par(n,nvars,_,learningRate : *)
-with {
-    window = ba.slidingMean(windowSize);
-    // Loss function (L1 norm)
-    loss = abs <: attach(hbargraph("[100]loss",0,.05));
-    // A way to move the partial derivatives around.
-    pds = si.bus(nvars);
-    // Calculate gradients; for L1 norm: dy/dx_i * (learnable - groundtruth) / abs(learnable - groundtruth)
-    gradients = route(nvars+1,2*nvars+1,(1,1),par(n,nvars,(1,n*2+3),(n+2,2*n+2)))
-        : (abs,1e-10 : max),par(n,nvars, *)
-        : route(nvars+1,nvars*2,par(n,nvars,(1,2*n+2),(n+2,2*n+1)))
-        : par(n,nvars, / <: attach(hbargraph("[101]gradient %n",-.5,.5)));
-};
-
+    : +,par(i, nvars, +);
 };
 
 // Differentiable subtraction.
@@ -376,10 +50,10 @@ with {
         )
     )
     with {
-        nIN = 2 + 2*nvars;
+        nIN = 2+2*nvars;
         nOUT = nIN;
         u = 1;
-        v = 1 + nvars + 1;
+        v = u+nvars+1;
     }
     : -,par(i, nvars, -);
 };
@@ -397,16 +71,16 @@ with {
             (dudx,dx+2),(v,dx+3)  // du/dx_i * v
             with {
                 dx = 4*i+3; // Start of derivatives wrt ith var
-                dudx = u + i + 1;
-                dvdx = v + i + 1;
+                dudx = u+i+1;
+                dvdx = v+i+1;
             }
         )
     )
     with {
-        nIN = 2 + 2*nvars;
-        nOUT = 2 + 4*nvars;
+        nIN = 2+2*nvars;
+        nOUT = 2+4*nvars;
         u = 1;
-        v = 1 + nvars + 1;
+        v = u+nvars+1;
     }
     : *,par(i, nvars, *,* : +);
 };
@@ -424,17 +98,17 @@ with {
             (u,dx+2),(dvdx,dx+3)  // du/dx_i * v
             with {
                 dx = 4*i+3; // Start of derivatives wrt ith var
-                dudx = u + i + 1;
-                dvdx = v + i + 1;
+                dudx = u+i+1;
+                dvdx = v+i+1;
             }
         ),
         (v,nOUT),(v,nOUT-1)       // v^2
     )
     with {
-        nIN = 2 + 2*nvars;
-        nOUT = 2 + 4*nvars + 2;
+        nIN = 2+2*nvars;
+        nOUT = 2+4*nvars+2;
         u = 1;
-        v = 1 + nvars + 1;
+        v = u+nvars+1;
     }
     : /,(par(i, nvars, *,* : -),(*,1e-10 : max) // Prevent division by zero
         // Divide all by v^2
@@ -495,10 +169,10 @@ with {
                 (v+i+1,v+i+1+nvars) // v'
             ))
         with {
-            nIN = 2 + 2*nvars;
-            nOUT = nIN + nvars;
+            nIN = 2+2*nvars;
+            nOUT = nIN+nvars;
             u = 1;
-            v = 1 + nvars + 1;
+            v = i+nvars+1;
         }
         : duv_dn,par(i,nvars,delay),si.bus(nvars) // u[n-v], (u[n-v])'_n, u'[n-v], v'
         : _,route(nIN,nOUT,
@@ -509,10 +183,10 @@ with {
             )
         )
         with {
-            nIN = 1 + 2*nvars;
-            nOUT = nIN + nvars - 1;
+            nIN = 1+2*nvars;
+            nOUT = nIN+nvars-1;
             du = 2;
-            dv = nvars + 2;
+            dv = nvars+2;
         }
         : _,par(i,nvars, _,* : -)
     with {

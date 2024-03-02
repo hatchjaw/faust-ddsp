@@ -226,40 +226,40 @@ primitives:
 ```faust
 diffInput(nvars) = _,par(n,nvars,0);
 
-diffSlider(nvars,i,init,lo,hi,step) = hslider("x%i",init,lo,hi,step),par(n,nvars,n==i-1);
+diffSlider(nvars,I,init,lo,hi,step) = hslider("x%I",init,lo,hi,step),par(i,nvars,i==I-1);
 
 diffAdd(nvars) = route(nIN,nOUT,
         (u,1),(v,2), // u + v
-        par(n,nvars,
-            (u+n+1,dx),(v+n+1,dx+1) // du/dx_i + dv/dx_i
+        par(i,nvars,
+            (u+i+1,dx),(v+i+1,dx+1) // du/dx_i + dv/dx_i
             with {
-                dx = 2*n+3; // Start of derivatives wrt ith var
+                dx = 2*i + 3; // Start of derivatives wrt ith var
             }
         )
     ) with {
         nIN = 2 + 2*nvars;
         nOUT = nIN;
         u = 1;
-        v = 1 + nvars + 1;
-    } : +,par(n, nvars, +);
+        v = u+nvars+1;
+    } : +,par(i, nvars, +);
 
 diffMul(nvars) = route(nIN,nOUT,
         (u,1),(v,2), // u * v
-        par(n,nvars,
+        par(i,nvars,
             (u,dx),(dvdx,dx+1),   // u * dv/dx_i
             (dudx,dx+2),(v,dx+3)  // du/dx_i * v
             with {
-                dx = 4*n+3; // Start of derivatives wrt ith var
-                dudx = u + n + 1;
-                dvdx = v + n + 1;
+                dx = 4*i+3; // Start of derivatives wrt ith var
+                dudx = u+i+1;
+                dvdx = v+i+1;
             }
         )
     ) with {
-        nIN = 2 + 2*nvars;
-        nOUT = 2 + 4*nvars;
+        nIN = 2+2*nvars;
+        nOUT = 2+4*nvars;
         u = 1;
-        v = 1 + nvars + 1;
-    } : *,par(n, nvars, *,* : +);
+        v = u+nvars+1;
+    } : *,par(i, nvars, *,* : +);
 ```
 
 The routing for `diffAdd` and `diffMul` is a bit more involved, but the same
