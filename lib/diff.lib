@@ -172,7 +172,7 @@ with {
             nIN = 2+2*nvars;
             nOUT = nIN+nvars;
             u = 1;
-            v = i+nvars+1;
+            v = u+nvars+1;
         }
         : duv_dn,par(i,nvars,delay),si.bus(nvars) // u[n-v], (u[n-v])'_n, u'[n-v], v'
         : _,route(nIN,nOUT,
