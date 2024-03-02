@@ -193,7 +193,7 @@ $u$ will again be an arbitrary input signal, for which we have no analytic
 expression.
 
 Now, rather than being a lone ordinary derivative $\frac{dy}{dx}$, the
-derivative of $y$, $y'$, is a vector of *partial derivatives*:
+derivative of $y$ &mdash; $y'$ &mdash; is a vector of *partial derivatives*:
 
 $$
 y' = \begin{bmatrix}\frac{\partial y}{\partial x_1}&
@@ -217,10 +217,76 @@ and:
 $$
 \frac{\partial y}{\partial x_i} = \frac{\partial u}{\partial x_i}v +
 \frac{\partial v}{\partial x_i}u +
-\frac{\partial w}{\partial x_i}
+\frac{\partial w}{\partial x_i}.
 $$
 
----   
+To implement the above in Faust, let's define some multivariate differentiable
+primitives:
+
+```faust
+diffInput(nvars) = _,par(n,nvars,0);
+
+diffSlider(nvars,i,init,lo,hi,step) = hslider("x%i",init,lo,hi,step),par(n,nvars,n==i-1);
+
+diffAdd(nvars) = route(nIN,nOUT,
+        (u,1),(v,2), // u + v
+        par(n,nvars,
+            (u+n+1,dx),(v+n+1,dx+1) // du/dx_i + dv/dx_i
+            with {
+                dx = 2*n+3; // Start of derivatives wrt ith var
+            }
+        )
+    ) with {
+        nIN = 2 + 2*nvars;
+        nOUT = nIN;
+        u = 1;
+        v = 1 + nvars + 1;
+    } : +,par(n, nvars, +);
+
+diffMul(nvars) = route(nIN,nOUT,
+        (u,1),(v,2), // u * v
+        par(n,nvars,
+            (u,dx),(dvdx,dx+1),   // u * dv/dx_i
+            (dudx,dx+2),(v,dx+3)  // du/dx_i * v
+            with {
+                dx = 4*n+3; // Start of derivatives wrt ith var
+                dudx = u + n + 1;
+                dvdx = v + n + 1;
+            }
+        )
+    ) with {
+        nIN = 2 + 2*nvars;
+        nOUT = 2 + 4*nvars;
+        u = 1;
+        v = 1 + nvars + 1;
+    } : *,par(n, nvars, *,* : +);
+```
+
+The routing for `diffAdd` and `diffMul` is a bit more involved, but the same
+principle applies as for the univariate differentiable addition primitive.
+Our dual signal representation now consists, for each primitive, of the
+undifferentiated primitive, and, in parallel, `nvars` partial derivatives, each
+with respect to the $i$th variable of interest.
+Accordingly, the differentiable slider now needs to know which value of $i$ to 
+take to ensure that the appropriate combination of partial derivatives can be 
+generated.
+
+Armed with the above we can write the differentiable equivalent of our gain+DC 
+example:
+
+```faust
+NVARS = 2;
+x1 = diffSlider(NVARS,1,.5,0,1,.1);
+x2 = diffSlider(NVARS,2,0,-1,1,.1);
+process = diffInput(NVARS),x1 : diffMul(NVARS),x2 : diffAdd(NVARS);
+```
+![](./images/gaindc2.svg)
+
+### Parameter Estimation
+
+...
+
+---
 
 The above describes forward-mode automatic differentiation...
 
@@ -229,3 +295,5 @@ The above describes forward-mode automatic differentiation...
 Syntax etc...
 
 ## Roadmap
+
+We have to specify `NVARS` and manually label our variables...
