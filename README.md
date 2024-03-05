@@ -423,6 +423,10 @@ functions for describing differentiable Faust programs.
 
 `diff` uses Faust's pattern matching feature where possible.
 
+Unless otherwise stated, all primitives and functions take `nvars`, the number
+of variables (i.e. the number of partial derivatives) in the program, as their
+final argument.
+
 ### Differentiable Primitives
 
 #### Number Primitive
@@ -506,7 +510,7 @@ $$
 ```faust
 process = df.diff(*,2);
 ```
-~[](./images/diffmul.svg)
+![](./images/diffmul.svg)
 
 #### Divide Primitive
 ```faust
@@ -526,7 +530,7 @@ uses whichever is the largest of $v^2$ and $1\times10^{-10}$.
 ```faust
 process = df.diff(/,2);
 ```
-~[](./images/diffdiv.svg)
+![](./images/diffdiv.svg)
 
 #### `int` Primitive
 ```faust  
@@ -550,7 +554,7 @@ integer values of $u$, i.e. at $\sin(\pi u) = 0$.
 ```faust
 process = df.diff(int,2);
 ```
-~[](./images/diffint.svg)
+![](./images/diffint.svg)
 
 #### `mem` Primitive
 ```faust
@@ -620,6 +624,16 @@ NB. To prevent division by zero in the partial derivatives, `diff(tan,nvars)`
 uses whichever is the largest of $\cos^2(u)$ and $1\times10^{-10}$.
 
 ### Helper Functions
+
+#### Input Primitive
+```faust
+df.input(nvars)
+```
+
+#### Differentiable Variable
+```faust
+df.var(I,var,nvars)
+```
 
 #### Differentiable Recursive Composition
 ```faust
