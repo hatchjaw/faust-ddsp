@@ -1,7 +1,8 @@
 import("stdfaust.lib");
 df = library("diff.lib");
 
-// This is completely broken, but sounds amazing
+// Attempting to learn the frequency of an oscillator in the time domain...
+// Broken, but the loss function produces some pretty cool noises.
 
 NVARS = 1;
 MAXFREQ = 5000.;
@@ -50,9 +51,9 @@ with {
         };
     };
 
-    phasor(f0,nvars) = f0,df.const(ma.SR,nvars)
+    phasor(f0,nvars) = f0,df.diff(ma.SR,nvars)
         : df.diff(/,nvars)
-        : df.rec(f~g,0),df.const(2*ma.PI,nvars)
+        : df.rec(f~g,0),df.diff(2*ma.PI,nvars)
         : df.diff(*,nvars)
         with {
             f = df.diff(+,nvars) <: df.diff(_,nvars),df.diff(int,nvars) : df.diff(-,nvars);

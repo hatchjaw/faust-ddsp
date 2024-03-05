@@ -62,7 +62,7 @@ with{
             // N:      number of filter taps
             // offset: offset for the index of the differentiable parameter
             // isA:    is this a feedforward (0) or a feedback (1) tap?
-            bank(0,offest,isA) = df.const(0,NVARS);
+            bank(0,offest,isA) = df.diff(0,NVARS);
             bank(N,offset,isA) =
                 route(NVARS+N+1,N*NVARS+2*N,
                     par(n,N,
@@ -72,7 +72,7 @@ with{
                         (NVARS+n+2,(NVARS+2)*(n+1))
                     )
                 ) : par(n, N,
-                    df.diff(_,NVARS),df.const(n,NVARS),_
+                    df.diff(_,NVARS),df.diff(n,NVARS),_
                     : df.diff(@,NVARS),df.var(n+offset+1,coeff,NVARS)
                     : df.diff(*,NVARS)
                     with {

@@ -14,7 +14,11 @@ DDSP experiments in Faust.
     - [`int` Primitive](#int-primitive)
     - [`mem` Primitive](#mem-primitive)
     - [`@` Primitive](#-primitive)
-  - [Helpers](#helper-functions)
+    - [`sin` Primitive](#sin-primitive)
+    - [`cos` Primitive](#cos-primitive)
+    - [`tan` Primitive](#tan-primitive)
+  - [Helper Functions](#helper-functions)
+  - [Loss Functions](#loss-functions)
 - [Roadmap](#roadmap)
 
 ## What is DDSP?
@@ -421,6 +425,23 @@ functions for describing differentiable Faust programs.
 
 ### Differentiable Primitives
 
+#### Number Primitive
+```faust
+df.diff(x,nvars)
+```
+$$
+\langle x,x' \rangle = \langle x,0 \rangle
+$$
+
+- Input: a constant numerical expression, i.e. a signal of constant value `x`
+- Output: one dual signal consisting of the constant signal and `nvars` partial
+  derivatives, which all equal $0$.
+
+```faust
+process = df.diff(2*ma.PI,2);
+```
+![](./images/diffnum.svg)
+
 #### Identity Function
 ```faust
 df.diff(_,nvars)
@@ -432,6 +453,11 @@ $$
 - Input: one dual signal
 - Output: the unmodified dual signal
 
+```faust
+process = df.diff(_,2);
+```
+![](./images/diffwire.svg)
+
 #### Add Primitive
 ```faust
 df.diff(+,nvars)
@@ -442,6 +468,11 @@ $$
 
 - Input: two dual signals
 - Output: one dual signal consisting of the sum and `nvars` partial derivatives
+
+```faust
+process = df.diff(+,2);
+```
+![](./images/diffadd.svg)
 
 #### Subtract Primitive
 ```faust
@@ -455,6 +486,11 @@ $$
 - Output: one dual signal consisting of the difference and `nvars` partial
   derivatives
 
+```faust
+process = df.diff(-,2);
+```
+![](./images/diffsub.svg)
+
 #### Multiply Primitive
 ```faust
 df.diff(*,nvars)
@@ -464,8 +500,13 @@ $$
 $$
 
 - Input: two dual signals
-- Output: one dual signal consisting of the product and `nvanrs` partial
+- Output: one dual signal consisting of the product and `nvars` partial
   derivatives
+
+```faust
+process = df.diff(*,2);
+```
+~[](./images/diffmul.svg)
 
 #### Divide Primitive
 ```faust
@@ -482,12 +523,17 @@ $$
 NB. To prevent division by zero in the partial derivatives, `diff(/,nvars)`
 uses whichever is the largest of $v^2$ and $1\times10^{-10}$.
 
+```faust
+process = df.diff(/,2);
+```
+~[](./images/diffdiv.svg)
+
 #### `int` Primitive
 ```faust  
 df.diff(int,nvars)  
 ```  
 $$
-\text{int}\left(\langle u, u'\rangle\right) = \langle\text{int}(u), \partial \rangle \\
+\text{int}\left(\langle u, u'\rangle\right) = \langle\text{int}(u), \partial \rangle, \quad
 \partial = \begin{cases}
     1, &\sin(\pi u) = 0\\
     0, &\text{otherwise.}
@@ -501,6 +547,11 @@ $$
 NB. `int` is a discontinuous function, and its derivative is impulse-like at 
 integer values of $u$, i.e. at $\sin(\pi u) = 0$.
 
+```faust
+process = df.diff(int,2);
+```
+~[](./images/diffint.svg)
+
 #### `mem` Primitive
 ```faust
 df.diff(mem,nvars)
@@ -512,6 +563,11 @@ $$
 - Input: one dual signal
 - Output: one dual signal consisting of the delayed signal and `nvars` delayed
   partial derivatives
+
+```faust
+process = df.diff(mem,2);
+```
+![](./images/diffmem.svg)
 
 #### `@` Primitive
 ```faust
@@ -531,7 +587,66 @@ This component is computed asymmetrically in time, so `df.diff(@,nvars)` is of
 limited use for time-variant $v$.
 It appears to behave well enough for fixed $v$.
 
+```faust
+process = df.input(2),df.diff(10,2) : df.diff(@,2);
+```
+![](./images/diffdel.svg)
+
+#### `sin` Primitive
+```faust
+df.diff(sin,nvars)
+```
+$$
+\sin(\langle u, u'\rangle) = \langle\sin(u), u'\cos(u)\rangle
+$$
+
+#### `cos` Primitive
+```faust
+df.diff(cos,nvars)
+```
+$$
+\cos(\langle u, u'\rangle) = \langle\cos(u), -u'\sin(u)\rangle
+$$
+
+#### `tan` Primitive
+```faust
+df.diff(tan,nvars)
+```
+$$
+\tan(\langle u, u'\rangle) = \langle\tan(u), \frac{u'}{\cos^2(u)}\rangle
+$$
+
+NB. To prevent division by zero in the partial derivatives, `diff(tan,nvars)`
+uses whichever is the largest of $\cos^2(u)$ and $1\times10^{-10}$.
+
 ### Helper Functions
+
+#### Differentiable Recursive Composition
+```faust
+df.rec(f~g,ngrads)
+```
+
+#### Differentiable Phasor
+```faust
+df.phasor(f0,nvars)
+```
+
+#### Differentiable Oscillator
+```faust
+df.osc(f0,nvars)
+```
+
+### Loss Functions
+
+#### L1 time-domain
+```faust
+df.learnL1(windowSize, learningRate, nvars)
+```
+
+#### L2 time-domain
+```faust
+df.learnL2(windowSize, learningRate, nvars)
+```
 
 ## Roadmap
 

@@ -4,7 +4,7 @@ df = library("diff.lib");
 NVARS = 2;
 MAXDELAY = 100;
 
-q = df.input(NVARS),df.const(2,NVARS) : df.diff(@,NVARS);
+q = df.input(NVARS),df.diff(2,NVARS) : df.diff(@,NVARS);
 
 process = p;
 

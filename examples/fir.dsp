@@ -44,7 +44,7 @@ with{
 
     learnable = route(1+NTAPS,NTAPS*2,par(n,NTAPS,(1,2*n+1),(n+2,2*n+2))) :
         par(n, NTAPS,
-            df.input(NTAPS),df.const(n,NTAPS),_
+            df.input(NTAPS),df.diff(n,NTAPS),_
             : df.diff(@,NTAPS),df.var(n+1,bn,NTAPS)
             : df.diff(*,NTAPS)
             with {

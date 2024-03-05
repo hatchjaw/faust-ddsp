@@ -54,9 +54,9 @@ with {
         };
     };
 
-    phasor(f0,nvars) = f0,df.const(ma.SR,nvars)
+    phasor(f0,nvars) = f0,df.diff(ma.SR,nvars)
         : df.diff(/,nvars)
-        : df.rec(f~g,0),df.const(2*ma.PI,nvars)
+        : df.rec(f~g,0),df.diff(2*ma.PI,nvars)
         : df.diff(*,nvars)
         with {
             f = df.diff(+,nvars) <: df.diff(_,nvars),df.diff(int,nvars) : df.diff(-,nvars);

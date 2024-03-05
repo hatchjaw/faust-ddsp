@@ -33,7 +33,7 @@ with{
             with {
                 bn = -~_ <: attach(hbargraph("b%n",-1,1));
 
-                delay = df.diff(_,NTAPS),df.const(n,NTAPS) : df.diff(@,NTAPS);
+                delay = df.diff(_,NTAPS),df.diff(n,NTAPS) : df.diff(@,NTAPS);
                 coeff = df.var(n+1,bn,NTAPS);
                 multiply = df.diff(*,NTAPS);
             })

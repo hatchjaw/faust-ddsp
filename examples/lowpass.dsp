@@ -57,7 +57,7 @@ with {
             : df.rec(f~g,2)
             with {
                 f = df.diff(+,NVARS);
-                g = df.diff(_,NVARS),(df.const(0,NVARS),a1 : df.diff(-,NVARS)) : df.diff(*,NVARS);
+                g = df.diff(_,NVARS),(df.diff(0,NVARS),a1 : df.diff(-,NVARS)) : df.diff(*,NVARS);
             }
         with {
             cutoff = -~_
@@ -70,15 +70,15 @@ with {
                     mid = maxi,mini,2 : +,_ : /;
                 }
                 <: attach(hbargraph("[1]Cutoff [scale:log]",50.,20000.));
-            w = df.const(2*ma.PI,NVARS),df.var(1,cutoff,NVARS) : df.diff(*,NVARS);
-            c = df.const(1,NVARS),df.const(.5/ma.SR,NVARS),w
+            w = df.diff(2*ma.PI,NVARS),df.var(1,cutoff,NVARS) : df.diff(*,NVARS);
+            c = df.diff(1,NVARS),df.diff(.5/ma.SR,NVARS),w
                 : df.diff(_,NVARS),df.diff(*,NVARS)
                 : df.diff(_,NVARS),df.diff(tan,NVARS)
                 : df.diff(/,NVARS);
-            d = df.const(1,NVARS),c : df.diff(+,NVARS);
-            b0 = df.const(1,NVARS),d : df.diff(/,NVARS);
-            b1 = df.const(1,NVARS),d : df.diff(/,NVARS);
-            a1 = df.const(1,NVARS),c,d : df.diff(-,NVARS),df.diff(_,NVARS) : df.diff(/,NVARS);
+            d = df.diff(1,NVARS),c : df.diff(+,NVARS);
+            b0 = df.diff(1,NVARS),d : df.diff(/,NVARS);
+            b1 = df.diff(1,NVARS),d : df.diff(/,NVARS);
+            a1 = df.diff(1,NVARS),c,d : df.diff(-,NVARS),df.diff(_,NVARS) : df.diff(/,NVARS);
         };
     };
 

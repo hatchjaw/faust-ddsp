@@ -201,19 +201,23 @@ with {
 
 // Differentiable utilities
 
+// A differentiable number.
+// Returns the number, plus its partial derivatives wrt all variables, which are all zero.
+// <x, x'> = <x, 0>
+diff(x,nvars) = x,par(i,nvars,0);
+
+// A differentiable (audio) input. Similar to a number.
+// Returns the input, plus its partial derivatives wrt all variables, which are all zero.
+// <x, x'> = <x, 0>
+input(nvars) = _,par(i,nvars,0);
+
 // A differentiable variable.
 // Returns a list containing the variable and a vector of its partial derivatives.
 // [ xi, dxi/dx1, dxi/dx2, ... , dxi/dxN ]
 var(I,var,nvars) = var,par(i,nvars,i+1==I);
-
-// A differentiable (audio) input.
-// Returns the input, plus its partial derivatives wrt all variables in the system, which are all zero.
-// <x, x'> = <x, 0>
-input(nvars) = _,par(i,nvars,0);
-
-// A differentiable constant. Similar to an input.
-// <x, x'> = <x, 0>
-const(val,nvars) = val,par(i,nvars,0);
+// TODO: replace with something that encapsulates gradient descent and metering, e.g.
+// var(nvars,I,graph) = -~_ <: attach(graph),par(i,nvars,i+1==I);
+// TODO: also normalisation?
 
 // A friendly way of handling a differentiable recursion.
 // ngrads is the number of inputs available for passing in gradients.
@@ -223,19 +227,17 @@ with {
     m = inputs(G)-ngrads;
 };
 
-// p = hslider("p",1,0,10,1);
-// q = -~_;
-// process = (df.diff(+,NVARS),_) ~ (route(3,3,(3,1),(2,3),(1,2)) : df.var(1,q,NVARS),df.diff(_,NVARS) : df.diff(*,NVARS)) : _,_,!;
-
-phasor(f0,nvars) = f0,const(ma.SR,nvars)
+// f0 is a dual signal
+phasor(f0,nvars) = f0,diff(ma.SR,nvars)
     : diff(/,nvars)
-    : rec(f~g,0),const(2*ma.PI,nvars)
+    : rec(f~g,0),diff(2*ma.PI,nvars)
     : diff(*,nvars)
     with {
         f = diff(+,nvars) <: diff(_,nvars),diff(int,nvars) : diff(-,nvars);
         g = diff(_,nvars);
     };
 
+// f0 is a dual signal
 osc(f0,nvars) = phasor(f0,nvars) : diff(sin,nvars);
 
 //===========================================================================
