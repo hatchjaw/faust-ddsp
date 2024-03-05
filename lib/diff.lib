@@ -88,7 +88,7 @@ with {
 // Differentiable division.
 // Takes two dual numbers as input;
 // returns the quotient and its derivative.
-// <u, u'> / <v, v'> = <u*v, (u'*v - u*v') / v^2>
+// <u, u'> / <v, v'> = <u/v, (u'*v - u*v') / v^2>
 diff(/,nvars) = diffdiv
 with {
     diffdiv = route(nIN,nOUT,
@@ -148,7 +148,7 @@ with {
 // <u, u'>[n-1] = <u[n-1], u'[n-1]>
 diff(mem,nvars) = diffmem with{ diffmem = mem,par(i,nvars,mem); };
 
-// Int cast... should be nonzero for sin(pi*x) == 0
+// Int cast... should be nonzero for sin(pi*u) == 0
 // int(<u, u'>) = <int(u), 0>
 diff(int,nvars) = diffint with{ diffint = int,par(i,nvars,_ <: _,int : ==); };
 

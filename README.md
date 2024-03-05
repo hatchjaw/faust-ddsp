@@ -5,6 +5,16 @@ DDSP experiments in Faust.
 - [What is DDSP](#what-is-ddsp)
 - [DDSP in Faust](#ddsp-in-faust)
 - [The `diff` library](#the-diff-library)
+  - [Primitives](#primitives)
+    - [Identity Function](#identity-function)
+    - [Add Primitive](#add-primitive)
+    - [Subtract Primitive](#subtract-primitive)
+    - [Multiply Primitive](#multiply-primitive)
+    - [Divide Primitive](#divide-primitive)
+    - [`int` Primitive](#int-primitive)
+    - [`mem` Primitive](#mem-primitive)
+    - [`@` Primitive](#-primitive)
+  - [Helpers](#helper-functions)
 - [Roadmap](#roadmap)
 
 ## What is DDSP?
@@ -51,9 +61,8 @@ the sum of two input signals, $u$ and $v$.
 
 $$y = u + v.$$
 
-Bear in mind that the addition primitive doesn't *know* anything about its
-arguments, their origin, provenance, etc., it just consumes them and returns
-their sum.
+Note that the addition primitive doesn't *know* anything about its arguments, 
+their origin, provenance, etc., it just consumes them and returns their sum.
 In Faust's *algebra*, the addition of two signals (and just about *everything*
 in Faust is a signal) is well-defined, and that's that.
 This idea will be important later.
@@ -113,7 +122,7 @@ $v$ *is* $x$, so $\frac{dv}{dx}$ is $1$.
 
 [^1]: This serves well enough for the example at hand, but in practice &mdash;
 in a machine learning implementation &mdash; a *learnable parameter* is more 
-like a bargraph. We'll get to that [later](#blahblah).
+like a bargraph. We'll get to that [later](#gradient-descent).
 
 ```faust
 x = hslider("x", 0, -1, 1, .1);
@@ -330,14 +339,14 @@ For our L1-norm loss function that looks like this:
 $$
 \begin{align*}
 \mathbf{x}_{t+1} &= \mathbf{x}_t - \alpha\frac{\partial\mathcal{L}}{\partial \mathbf{x}_t} \\
-&=  \mathbf{x}_t - \alpha\frac{\partial y}{\partial \mathbf{x}}\frac{y-\hat{y}}{|y-\hat{y}|}.
+&=  \mathbf{x}_t - \alpha\frac{\partial y}{\partial \mathbf{x}_t}\frac{y-\hat{y}}{|y-\hat{y}|}.
 \end{align*}
 $$
 
 In Faust, we can't programmatically update the value of a slider.
 What we really ought to do at this point, to automate the estimation of 
 parameter values, is invert our approach; we'll use sliders for our "hidden" 
-parameters, and create a differentiable variable to represent their "learnable" 
+parameters, and define a differentiable variable to represent their "learnable" 
 counterparts:
 
 ```faust
@@ -399,9 +408,132 @@ input, or compute phase-invariant loss in the frequency domain.
 
 ## The `diff` Library
 
-Syntax etc...
+To include the `diff` library, use Faust's `library` expression:
+
+```faust
+df = library("/path/to/diff.lib");
+```
+
+The library defines a selection of differentiable primitives and helper
+functions for describing differentiable Faust programs.
+
+`diff` uses Faust's pattern matching feature where possible.
+
+### Differentiable Primitives
+
+#### Identity Function
+```faust
+df.diff(_,nvars)
+```
+$$
+\langle u,u' \rangle = \langle u,u' \rangle
+$$
+
+- Input: one dual signal
+- Output: the unmodified dual signal
+
+#### Add Primitive
+```faust
+df.diff(+,nvars)
+```
+$$
+\langle u,u' \rangle + \langle v,v' \rangle = \langle u+v,u'+v' \rangle
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the sum and `nvars` partial derivatives
+
+#### Subtract Primitive
+```faust
+df.diff(-,nvars)
+```
+$$
+\langle u,u' \rangle - \langle v,v' \rangle = \langle u-v,u'-v' \rangle
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the difference and `nvars` partial
+  derivatives
+
+#### Multiply Primitive
+```faust
+df.diff(*,nvars)
+```
+$$
+\langle u,u' \rangle \langle v,v' \rangle = \langle uv,u'v+v'u \rangle
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the product and `nvanrs` partial
+  derivatives
+
+#### Divide Primitive
+```faust
+df.diff(/,nvars)
+```
+$$
+\frac{\langle u,u' \rangle}{\langle v,v' \rangle} = \langle \frac{u}{v}, \frac{u'v - v'u}{v^2} \rangle
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the quotient and `nvars` partial
+  derivatives
+
+NB. To prevent division by zero in the partial derivatives, `diff(/,nvars)`
+uses whichever is the largest of $v^2$ and $1\times10^{-10}$.
+
+#### `int` Primitive
+```faust  
+df.diff(int,nvars)  
+```  
+$$
+\text{int}\left(\langle u, u'\rangle\right) = \langle\text{int}(u), \partial \rangle \\
+\partial = \begin{cases}
+    1, &\sin(\pi u) = 0\\
+    0, &\text{otherwise.}
+\end{cases}
+$$
+
+- Input: one dual signal
+- Output: one dual signal consisting of the integer cast and `nvars` partial
+  derivatives
+
+NB. `int` is a discontinuous function, and its derivative is impulse-like at 
+integer values of $u$, i.e. at $\sin(\pi u) = 0$.
+
+#### `mem` Primitive
+```faust
+df.diff(mem,nvars)
+```
+$$
+\langle u, u'\rangle[n-1] = \langle u[n-1], u'[n-1] \rangle
+$$
+
+- Input: one dual signal
+- Output: one dual signal consisting of the delayed signal and `nvars` delayed
+  partial derivatives
+
+#### `@` Primitive
+```faust
+df.diff(@,nvars)
+```
+$$
+\langle u, u' \rangle[n-\langle v, v' \rangle] = \langle u[n-v], u'[n-v] - v'(u[n-v])'_n \rangle
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the first input signal delayed by the
+  second, and `nvars` partial derivatives of the delay expression
+
+NB. the general time-domain expression for the derivative of a delay features
+a component which is a derivative with respect to time: $(u[n-v])'_n$.
+This component is computed asymmetrically in time, so `df.diff(@,nvars)` is of
+limited use for time-variant $v$.
+It appears to behave well enough for fixed $v$.
+
+### Helper Functions
 
 ## Roadmap
 
 - We have to specify `NVARS` and manually label our variables...
-- Reverse mode?...
+- Reverse mode autodiff...
