@@ -35,7 +35,8 @@ process = hgroup("Differentiable oscillator",
     // Listen to the loss.
     : _,si.block(NVARS),!,! <: _,_
 with {
-    truth = os.triangle(hslider("freq [scale:log]", 500.,50.,MAXFREQ,.01));
+    //truth = os.triangle(hslider("freq [scale:log]", 500.,50.,MAXFREQ,.01));
+    truth = os.osc(hslider("freq [scale:log]", 500.,50.,MAXFREQ,.01));
 
     learnable = osc(df.var(1,f0,NVARS),NVARS)
     with {

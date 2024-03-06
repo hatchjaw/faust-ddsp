@@ -2,10 +2,11 @@
 
 DDSP experiments in Faust.
 
-- [What is DDSP](#what-is-ddsp)
+- [What is DDSP?](#what-is-ddsp)
 - [DDSP in Faust](#ddsp-in-faust)
 - [The `diff` library](#the-diff-library)
-  - [Primitives](#primitives)
+  - [Differentiable Primitives](#differentiable-primitives)
+    - [Number Primitive](#number-primitive)
     - [Identity Function](#identity-function)
     - [Add Primitive](#add-primitive)
     - [Subtract Primitive](#subtract-primitive)
@@ -18,6 +19,10 @@ DDSP experiments in Faust.
     - [`cos` Primitive](#cos-primitive)
     - [`tan` Primitive](#tan-primitive)
   - [Helper Functions](#helper-functions)
+    - [Input Primitive](#input-primitive)
+    - [Differentiable Variable](#differentiable-variable)
+    - [Differentiable Phasor](#differentiable-phasor)
+    - [Differentiable Oscillator](#differentiable-oscillator)
   - [Loss Functions](#loss-functions)
 - [Roadmap](#roadmap)
 
@@ -665,7 +670,7 @@ df.learnL2(windowSize, learningRate, nvars)
 ## Roadmap
 
 - We have to specify `NVARS` and manually label our variables...
-- More loss functions, optimisers...
+- More loss functions, optimisers, momentum...
 - Automatic parameter normalisation...
 - Frequency-domain loss...
 - Reverse mode autodiff...

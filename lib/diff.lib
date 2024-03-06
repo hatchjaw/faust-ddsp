@@ -204,7 +204,7 @@ with {
 // A differentiable number.
 // Returns the number, plus its partial derivatives wrt all variables, which are all zero.
 // <x, x'> = <x, 0>
-diff(x,nvars) = x,par(i,nvars,0);
+diff(x,nvars) = diffconst with{ diffconst = x,par(i,nvars,0); };
 
 // A differentiable (audio) input. Similar to a number.
 // Returns the input, plus its partial derivatives wrt all variables, which are all zero.
@@ -212,7 +212,7 @@ diff(x,nvars) = x,par(i,nvars,0);
 input(nvars) = _,par(i,nvars,0);
 
 // A differentiable variable.
-// Returns a list containing the variable and a vector of its partial derivatives.
+// Returns a dual signal containing the variable and a vector of its partial derivatives.
 // [ xi, dxi/dx1, dxi/dx2, ... , dxi/dxN ]
 var(I,var,nvars) = var,par(i,nvars,i+1==I);
 // TODO: replace with something that encapsulates gradient descent and metering, e.g.

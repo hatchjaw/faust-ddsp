@@ -1,5 +1,3 @@
-// Work in progress
-
 import("stdfaust.lib");
 df = library("diff.lib");
 
@@ -46,10 +44,8 @@ with {
 
     groundTruth = lpf(hiddenCutoff);
 
-    // learnable = df.input(NVARS),df.var(1,cutoff,NVARS) : df.diff(+,NVARS)
     learnable = learnableLPF
     with {
-        // learnableLPF = df.input(NVARS)...
         learnableLPF = df.input(NVARS),(si.bus(NVARS) <: si.bus(NVARS*2))
             : (df.diff(_,NVARS),si.bus(NVARS) <: (df.diff(_,NVARS),b0 : df.diff(*,NVARS)),(df.diff(mem,NVARS),b1 : df.diff(*,NVARS))),_
             : df.diff(+,NVARS),_
