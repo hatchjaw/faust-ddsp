@@ -550,7 +550,7 @@ df.diff(int,nvars)
 $$
 \text{int}\left(\langle u, u'\rangle\right) = \langle\text{int}(u), \partial \rangle, \quad
 \partial = \begin{cases}
-    \pm 1, &\sin(\pi u) = 0\\
+    \pm u', &\sin(\pi u) = 0\\
     0, &\text{otherwise.}
 \end{cases}
 $$

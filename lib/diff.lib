@@ -152,12 +152,16 @@ diff(mem,nvars) = diffmem with{ diffmem = mem,par(i,nvars,mem); };
 // int(<u, u'>) = <int(u), 0>
 diff(int,nvars) = diffint
 with{
-    diffint = int,par(i,nvars,
-        _ <: int,(_ <: _,_),_'
+    diffint = (
+        _ <: (int <: _,_),_,_,_'
         // Check whether input is an integer,
         // and whether it's increasing or decreasing.
-        : ==,(<,1,-1 : select2)
-        : *);
+        : _,==,(<,1,-1 : select2)
+        : _,*
+    ),par(i,nvars,_)
+    : _,route(1+nvars,nvars*2,par(i,nvars,(1,2*i+1),(i+2,2*i+2)))
+    // And (chain rule) multiply by u'
+    : _,par(i,nvars,*);
 };
 
 // Differentiable delay
