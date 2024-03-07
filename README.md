@@ -550,7 +550,7 @@ df.diff(int,nvars)
 $$
 \text{int}\left(\langle u, u'\rangle\right) = \langle\text{int}(u), \partial \rangle, \quad
 \partial = \begin{cases}
-    1, &\sin(\pi u) = 0\\
+    \pm 1, &\sin(\pi u) = 0\\
     0, &\text{otherwise.}
 \end{cases}
 $$
@@ -560,7 +560,8 @@ $$
   derivatives
 
 NB. `int` is a discontinuous function, and its derivative is impulse-like at 
-integer values of $u$, i.e. at $\sin(\pi u) = 0$.
+integer values of $u$, i.e. at $\sin(\pi u) = 0$; impulses are positive for
+increasing $u$, negative for decreasing.
 
 ```faust
 process = df.diff(int,2);

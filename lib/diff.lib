@@ -150,7 +150,15 @@ diff(mem,nvars) = diffmem with{ diffmem = mem,par(i,nvars,mem); };
 
 // Int cast... should be nonzero for sin(pi*u) == 0
 // int(<u, u'>) = <int(u), 0>
-diff(int,nvars) = diffint with{ diffint = int,par(i,nvars,_ <: _,int : ==); };
+diff(int,nvars) = diffint
+with{
+    diffint = int,par(i,nvars,
+        _ <: int,(_ <: _,_),_'
+        // Check whether input is an integer,
+        // and whether it's increasing or decreasing.
+        : ==,(<,1,-1 : select2)
+        : *);
+};
 
 // Differentiable delay
 // Only really works for delays that increase because it's asymmetrical in time.
