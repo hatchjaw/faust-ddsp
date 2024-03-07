@@ -6,20 +6,21 @@ df = library("diff.lib");
 
 NVARS = 1;
 MAXFREQ = 5000.;
+MINFREQ = 20.;
 
-p = df.osc(f0,NVARS)
-with {
-    f0 = -~_
-        // Map [-1,1] to range
-        <: attach(hbargraph("[1]Normalised freq",-1.,1.))
-        : (_,1.,mid : +,_ : (*,mini : +))
-        <: attach(hbargraph("[1]Frequency [scale:log]", mini, maxi))
-    with {
-        maxi = 10000.;
-        mini = 50.;
-        mid = maxi,mini,2 : +,_ : /;
-    };
-};
+// p = df.osc(f0,NVARS)
+// with {
+//     f0 = -~_
+//         // Map [-1,1] to range
+//         <: attach(hbargraph("[1]Normalised freq",-1.,1.))
+//         : (_,1.,mid : +,_ : (*,mini : +))
+//         <: attach(hbargraph("[1]Frequency [scale:log]", mini, maxi))
+//     with {
+//         maxi = 10000.;
+//         mini = 50.;
+//         mid = maxi,mini,2 : +,_ : /;
+//     };
+// };
 
 process = hgroup("Differentiable oscillator",
         vgroup("[0]Parameters", vgroup("Hidden", truth),vgroup("Learned", learnable))
@@ -35,8 +36,7 @@ process = hgroup("Differentiable oscillator",
     // Listen to the loss.
     : _,si.block(NVARS),!,! <: _,_
 with {
-    //truth = os.triangle(hslider("freq [scale:log]", 500.,50.,MAXFREQ,.01));
-    truth = os.osc(hslider("freq [scale:log]", 500.,50.,MAXFREQ,.01));
+    truth = os.osc(hslider("freq [scale:log]", 500.,MINFREQ,MAXFREQ,.01));
 
     learnable = osc(df.var(1,f0,NVARS),NVARS)
     with {
@@ -47,7 +47,7 @@ with {
             <: attach(hbargraph("[1]Frequency [scale:log]", mini, maxi))
         with {
             maxi = MAXFREQ;
-            mini = 50.;
+            mini = MINFREQ;
             mid = maxi,mini,2 : +,_ : /;
         };
     };
@@ -78,13 +78,13 @@ with {
     with {
         window = ba.slidingMean(windowSize);
         // "Loss" is just the difference between "truth" and learnable output
-        loss = _ <: attach(hbargraph("[100]loss",0,.05));
+        loss = _ <: attach(hbargraph("[100]loss",-5,5));
         // A way to move the partial derivatives around.
         pds = si.bus(nvars);
         // Calculate gradients; for L2 norm: 2 * dy/dx_i * (learnable - groundtruth)
         gradients = _,par(n,nvars, _,2 : *)
             : routeall
-            : par(n,nvars, * <: attach(hbargraph("[101]gradient %n",-.5,.5)));
+            : par(n,nvars, * <: attach(hbargraph("[101]gradient %n",-1000,1000)));
 
         // A utility to duplicate the first input for combination with all remaining inputs.
         routeall = _,si.bus(nvars)

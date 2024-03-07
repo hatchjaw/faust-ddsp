@@ -352,11 +352,17 @@ $$
 \end{align*}
 $$
 
-In Faust, we can't programmatically update the value of a slider.
-What we really ought to do at this point, to automate the estimation of 
-parameter values, is invert our approach; we'll use sliders for our "hidden" 
-parameters, and define a differentiable variable to represent their "learnable" 
+In Faust, we can't programmatically update the value of a slider.[^3]
+What we ought to do at this point, to automate the estimation of parameter 
+values, is invert our approach; we'll use sliders for our "hidden" parameters, 
+and define a differentiable variable to represent their "learnable" 
 counterparts:
+
+[^3]: Actually, programmatic parameter updates _are_ possible via 
+[Widget Modulation](https://faustdoc.grame.fr/manual/syntax/#widget-modulation),
+but changes aren't reflected in the UI.
+In the interests of keeping things intuitive and visually illustrative, we won't
+use widget modulation here.
 
 ```faust
 diffVar(nvars,I,graph) = -~_ <: attach(graph),par(i,nvars,i+1==I);
@@ -439,7 +445,7 @@ final argument.
 df.diff(x,nvars)
 ```
 $$
-\langle x,x' \rangle = \langle x,0 \rangle
+x \rightarrow \langle x,x' \rangle = \langle x,0 \rangle
 $$
 
 - Input: a constant numerical expression, i.e. a signal of constant value `x`
@@ -609,6 +615,15 @@ $$
 \sin(\langle u, u'\rangle) = \langle\sin(u), u'\cos(u)\rangle
 $$
 
+- Input: one dual signal
+- Output: one dual signal consisting of the sine of the input and `nvars`
+  partial derivatives
+
+```faust
+process = df.diff(sin,2);
+```
+![](./images/diffsin.svg)
+
 #### `cos` Primitive
 ```faust
 df.diff(cos,nvars)
@@ -616,6 +631,15 @@ df.diff(cos,nvars)
 $$
 \cos(\langle u, u'\rangle) = \langle\cos(u), -u'\sin(u)\rangle
 $$
+
+- Input: one dual signal
+- Output: one dual signal consisting of the cosine of the input and `nvars`
+  partial derivatives
+
+```faust
+process = df.diff(cos,2);
+```
+![](./images/diffcos.svg)
 
 #### `tan` Primitive
 ```faust
@@ -625,8 +649,17 @@ $$
 \tan(\langle u, u'\rangle) = \langle\tan(u), \frac{u'}{\cos^2(u)}\rangle
 $$
 
+- Input: one dual signal
+- Output: one dual signal consisting of the tangent of the input and `nvars`
+  partial derivatives
+
 NB. To prevent division by zero in the partial derivatives, `diff(tan,nvars)`
 uses whichever is the largest of $\cos^2(u)$ and $1\times10^{-10}$.
+
+```faust
+process = df.diff(tan,2);
+```
+![](./images/difftan.svg)
 
 ### Helper Functions
 
@@ -634,6 +667,14 @@ uses whichever is the largest of $\cos^2(u)$ and $1\times10^{-10}$.
 ```faust
 df.input(nvars)
 ```
+$$
+u \rightarrow \langle u,u' \rangle = \langle u,0 \rangle
+$$
+
+```faust
+process = df.input(2);
+```
+![](./images/diffinput.svg)
 
 #### Differentiable Variable
 ```faust
