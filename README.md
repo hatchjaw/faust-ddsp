@@ -21,9 +21,12 @@ DDSP experiments in Faust.
   - [Helper Functions](#helper-functions)
     - [Input Primitive](#input-primitive)
     - [Differentiable Variable](#differentiable-variable)
+    - [Differentiable Recursion](#differentiable-recursive-composition)
     - [Differentiable Phasor](#differentiable-phasor)
     - [Differentiable Oscillator](#differentiable-oscillator)
   - [Loss Functions](#loss-functions)
+    - [L1 time-domain](#l1-time-domain)
+    - [L2 time-domain](#l2-time-domain)
 - [Roadmap](#roadmap)
 
 ## What is DDSP?
@@ -161,7 +164,8 @@ from Faust's identity function, or *wire* (`_`), the derivative of which is also
 a wire.
 We need a distinct expression, however, for an arbitrary signal &mdash; mic 
 input, a soundfile, etc. &mdash; we know to be entering our program *from 
-outside*, as it were, and for which we have, in principle, analytic description.
+outside*, as it were, and for which we have, in principle, no analytic 
+description.
 
 ```faust
 diffInput = _,0;
@@ -169,7 +173,8 @@ diffSlider = hslider("x", 0, -1, 1, .1),1;
 ```
 
 Simply applying the differentiable addition primitive to these new primitives
-isn't going to work because its inputs won't arrive in the correct order; 
+isn't going to work because inputs to the adder won't arrive in the correct 
+order; 
 we can fix this with a bit of routing however:
 
 ```faust
@@ -411,9 +416,14 @@ depending on the learning rate) to meet the hidden values.
 
 Note that we actually needn't compute the loss function, unless we wanted to
 use some low threshold on $\mathcal{L}$ to halt the learning process.
-Also, we're not producing any true audio output, though we could easily route
+Also, we're not producing any true audio output,[^4] though we could easily route
 the first signal produced by the learnable algorithm to output by modifying
 the first `route()` instance in `vgroup("DDSP",...)`.
+
+[^4]: We _hear_ the signal produced by the loss function, however;
+there's plenty of fun to be had (see 
+[examples/broken-osc.dsp](./examples/broken-osc.dsp) for example) in sonifying 
+the byproducts of the learning process. 
 
 The example we've just considered is a pretty basic one, and if the inputs to 
 `groundTruth` and `learnable` were out of phase by, say, 25 samples, it 
@@ -550,7 +560,8 @@ df.diff(int,nvars)
 $$
 \text{int}\left(\langle u, u'\rangle\right) = \langle\text{int}(u), \partial \rangle, \quad
 \partial = \begin{cases}
-    \pm u', &\sin(\pi u) = 0\\
+    u', &\sin(\pi u) = 0, u~\text{increasing} \\
+    -u', &\sin(\pi u) = 0, u~\text{decreasing} \\
     0, &\text{otherwise.}
 \end{cases}
 $$
@@ -561,7 +572,10 @@ $$
 
 NB. `int` is a discontinuous function, and its derivative is impulse-like at 
 integer values of $u$, i.e. at $\sin(\pi u) = 0$; impulses are positive for
-increasing $u$, negative for decreasing.
+increasing $u$, negative for decreasing.[^5]
+
+[^5]: _Dear mathematicians: sorry about this; please don't send me to maths
+prison. Yours, Tommy._
 
 ```faust
 process = df.diff(int,2);
@@ -598,7 +612,8 @@ $$
   second, and `nvars` partial derivatives of the delay expression
 
 NB. the general time-domain expression for the derivative of a delay features
-a component which is a derivative with respect to time: $(u[n-v])'_n$.
+a component which is a derivative with respect to (discrete) time: 
+$(u[n-v])'_n$.
 This component is computed asymmetrically in time, so `df.diff(@,nvars)` is of
 limited use for time-variant $v$.
 It appears to behave well enough for fixed $v$.
@@ -685,6 +700,31 @@ df.var(I,var,nvars)
 #### Differentiable Recursive Composition
 ```faust
 df.rec(f~g,ngrads)
+```
+
+A utility for supporting the creation of differentiable recursive circuits.
+Facilitates the passing of gradients into the body of the recursion.
+
+- Inputs:
+  - `f`: A differentiable expression taking two dual signals as input and
+    producing one dual signal as output.
+  - `g`: A differentiable expression taking one dual signal as input and 
+    producing one dual signal as output.
+  - `ngrads`: The number of differentiable variables in `g`, i.e. the number
+    of gradients that must be passed into the body of the recursion
+- Outputs: One dual signal; the result of the recursion.
+
+E.g. a differentiable 1-pole filter with one parameter, the coefficient of the
+feedback component:
+
+```faust
+process = gradient,df.input(2) : df.rec(f~g,1)
+with {
+    f = df.diff(+,2);
+    g = df.diff(_,2),df.var(1,a,2) : df.diff(*,2);
+    a = -~_;
+    gradient = _;
+};
 ```
 
 #### Differentiable Phasor

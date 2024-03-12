@@ -6,8 +6,15 @@ ma = library("maths.lib");
 de = library("delays.lib");
 df = library("diff.lib");
 
-// Differentiable primitives.
+declare name "Faust Automatic Differentiation Library";
+declare version "0.0.1";
+declare author "Thomas Rushton";
 
+//========================Differentiable primitives=============================
+//
+//==============================================================================
+
+//-----------------------------`(df.)diff(_,nvars)`-----------------------------
 // Derivative of the identity function.
 // Returns nvars+1 parallel identity functions.
 diff(_,nvars) = si.bus(nvars+1);
@@ -148,8 +155,14 @@ with {
 // <u, u'>[n-1] = <u[n-1], u'[n-1]>
 diff(mem,nvars) = diffmem with{ diffmem = mem,par(i,nvars,mem); };
 
-// Int cast... should be nonzero for sin(pi*u) == 0
-// int(<u, u'>) = <int(u), 0>
+// Differentiable int cast... derivative should be nonzero for sin(pi*u) == 0
+// int(<u, u'>) = <int(u), d>
+//                / u',  sin(pi*u) == 0, u increasing
+//            d = { -u', sin(pi*u) == 0, u decreasing
+//                \ 0,   otherwise
+// This isn't perfectly mathematically sound.
+// For algorithms where int cast is useful it's also unlikely that u will land
+// precisely on an integer value at time n.
 diff(int,nvars) = diffint
 with{
     diffint = (
