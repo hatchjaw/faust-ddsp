@@ -24,6 +24,8 @@ DDSP experiments in Faust.
     - [Differentiable Recursion](#differentiable-recursive-composition)
     - [Differentiable Phasor](#differentiable-phasor)
     - [Differentiable Oscillator](#differentiable-oscillator)
+    - [Differentiable `sum` iteration](#differentiable-sum-iteration)
+    - [Backpropagation Circuit](#backpropagation-circuit)
   - [Loss Functions](#loss-functions)
     - [L1 time-domain](#l1-time-domain)
     - [L2 time-domain](#l2-time-domain)
@@ -75,7 +77,7 @@ $$
 y = u + v.
 $$
 
-Note that the addition primitive doesn't *know* anything about its arguments, 
+Note that the addition primitive doesn't *know* anything about its arguments,
 their origin, provenance, etc., it just consumes them and returns their sum.
 In Faust's *algebra*, the addition of two signals (and just about *everything*
 in Faust is a signal) is well-defined, and that's that.
@@ -134,9 +136,10 @@ we'll create one and assign it to $v$.
 $u$ and $x$ have no direct relationship, so $\frac{du}{dx}$ is $0$.
 $v$ *is* $x$, so $\frac{dv}{dx}$ is $1$.
 
-[^1]: This serves well enough for the example at hand, but in practice &mdash; 
-in a machine learning implementation &mdash; a *learnable parameter* is more 
+[^1]: This serves well enough for the example at hand, but in practice &mdash;
+in a machine learning implementation &mdash; a *learnable parameter* is more
 like a bargraph. We'll get to that [later](#gradient-descent).
+
 ```faust
 x = hslider("x", 0, -1, 1, .1);
 u = _;
@@ -163,9 +166,9 @@ We can generalise things a bit by defining a *differentiable input*[^2] and a
 In fact, syntactically, what we're calling an *input* here is indistinguishable
 from Faust's identity function, or *wire* (`_`), the derivative of which is also
 a wire.
-We need a distinct expression, however, for an arbitrary signal &mdash; mic 
-input, a soundfile, etc. &mdash; we know to be entering our program *from 
-outside*, as it were, and for which we have, in principle, no analytic 
+We need a distinct expression, however, for an arbitrary signal &mdash; mic
+input, a soundfile, etc. &mdash; we know to be entering our program *from
+outside*, as it were, and for which we have, in principle, no analytic
 description.
 
 ```faust
@@ -174,8 +177,8 @@ diffSlider = hslider("x", 0, -1, 1, .1),1;
 ```
 
 Simply applying the differentiable addition primitive to these new primitives
-isn't going to work because inputs to the adder won't arrive in the correct 
-order; 
+isn't going to work because inputs to the adder won't arrive in the correct
+order;
 we can fix this with a bit of routing however:
 
 ```faust
@@ -187,6 +190,7 @@ Now we can write:
 ```faust
 process = diffInput,diffSlider : diffAdd;
 ```
+
 ![](./images/dc2.svg)
 
 The outputs of our program are the same as before, but we've computed the
@@ -197,7 +201,7 @@ on differentiable primitives and dual signals.
 
 ### Multivariate Problems
 
-The above works fine for a single variable, but what if our program has more 
+The above works fine for a single variable, but what if our program has more
 than one variable?
 Consider the following non-differentiable example featuring a gain control and
 a DC offset:
@@ -207,6 +211,7 @@ x1 = hslider("gain", .5, 0, 1, .1);
 x2 = hslider("dc", 0, -1, 1, .1);
 process = _,x1 : *,x2 : +;
 ```
+
 ![](./images/gaindc1.svg)
 
 We can write this as:
@@ -222,8 +227,8 @@ Now, rather than being a lone ordinary derivative $\frac{dy}{dx}$, the
 derivative of $y$ &mdash; $y'$ &mdash; is a matrix of *partial derivatives*:
 
 $$
-y' = \frac{\partial y}{\partial \mathbf{x}} 
-   = \begin{bmatrix}\frac{\partial y}{\partial x_1} \\
+y' = \frac{\partial y}{\partial \mathbf{x}}
+= \begin{bmatrix}\frac{\partial y}{\partial x_1} \\
 \frac{\partial y}{\partial x_2}\end{bmatrix}.
 $$
 
@@ -236,9 +241,9 @@ of differentiation, we have:
 $$
 \begin{align*}
 \langle y,y' \rangle &=
-    \langle u,u' \rangle \langle v,v' \rangle + \langle w,w' \rangle \\
-                     &= \langle uv,u'v + v'u \rangle + \langle w,w' \rangle \\
-                     &= \langle uv + w,u'v + v'u + w'\rangle,
+\langle u,u' \rangle \langle v,v' \rangle + \langle w,w' \rangle \\
+&= \langle uv,u'v + v'u \rangle + \langle w,w' \rangle \\
+&= \langle uv + w,u'v + v'u + w'\rangle,
 \end{align*}
 $$
 
@@ -289,11 +294,11 @@ principle applies as for the univariate differentiable addition primitive.
 Our dual signal representation now consists, for each primitive, of the
 undifferentiated primitive, and, in parallel, `nvars` partial derivatives, each
 with respect to the $i$th variable of interest.
-Accordingly, the differentiable slider now needs to know which value of $i$ to 
-take to ensure that the appropriate combination of partial derivatives can be 
+Accordingly, the differentiable slider now needs to know which value of $i$ to
+take to ensure that the appropriate combination of partial derivatives can be
 generated.
 
-Armed with the above we can write the differentiable equivalent of our gain+DC 
+Armed with the above we can write the differentiable equivalent of our gain+DC
 example:
 
 ```faust
@@ -302,12 +307,13 @@ x1 = diffSlider(NVARS,1,.5,0,1,.1);
 x2 = diffSlider(NVARS,2,0,-1,1,.1);
 process = diffInput(NVARS),x1 : diffMul(NVARS),x2 : diffAdd(NVARS);
 ```
+
 ![](./images/gaindc2.svg)
 
 ### Estimating Hidden Parameters
 
-Assigning the above algorithm to a variable `estimate`, we can compare its 
-first output, $y$, with target output, $\hat{y}$, produced by a `groundTruth` 
+Assigning the above algorithm to a variable `estimate`, we can compare its
+first output, $y$, with target output, $\hat{y}$, produced by a `groundTruth`
 algorithm with hard-coded gain and DC values.
 We'll use Faust's default sine wave oscillator as input to both algorithms,
 and, to perform the comparison, we'll use a time-domain L1-norm loss function:
@@ -331,10 +337,10 @@ with {
 };
 ```
 
-Running this in the 
+Running this in the
 [Faust web IDE](https://faustide.grame.fr/?autorun=1&voices=0&name=gain_dc_estimate&inline=aW1wb3J0KCJzdGRmYXVzdC5saWIiKTsKCmRlY2xhcmUgbmFtZSAiRGlmZmVyZW50aWFibGUgZ2FpbitEQyI7CgpkaWZmSW5wdXQobnZhcnMpID0gXyxwYXIobixudmFycywwKTsKCmRpZmZTbGlkZXIobnZhcnMsSSxpbml0LGxvLGhpLHN0ZXApID0gaHNsaWRlcigieCVJIixpbml0LGxvLGhpLHN0ZXApLHBhcihpLG52YXJzLGk9PUktMSk7CgpkaWZmQWRkKG52YXJzKSA9IHJvdXRlKG5JTixuT1VULAogICAgICAgICh1LDEpLCh2LDIpLCAvLyB1ICsgdgogICAgICAgIHBhcihpLG52YXJzLAogICAgICAgICAgICAodStpKzEsZHgpLCh2K2krMSxkeCsxKSAvLyBkdS9keF9pICsgZHYvZHhfaQogICAgICAgICAgICB3aXRoIHsKICAgICAgICAgICAgICAgIGR4ID0gMippICsgMzsgLy8gU3RhcnQgb2YgZGVyaXZhdGl2ZXMgd3J0IGl0aCB2YXIKICAgICAgICAgICAgfQogICAgICAgICkKICAgICkgd2l0aCB7CiAgICAgICAgbklOID0gMiArIDIqbnZhcnM7CiAgICAgICAgbk9VVCA9IG5JTjsKICAgICAgICB1ID0gMTsKICAgICAgICB2ID0gdStudmFycysxOwogICAgfSA6ICsscGFyKGksIG52YXJzLCArKTsKCmRpZmZNdWwobnZhcnMpID0gcm91dGUobklOLG5PVVQsCiAgICAgICAgKHUsMSksKHYsMiksIC8vIHUgKiB2CiAgICAgICAgcGFyKGksbnZhcnMsCiAgICAgICAgICAgICh1LGR4KSwoZHZkeCxkeCsxKSwgICAvLyB1ICogZHYvZHhfaQogICAgICAgICAgICAoZHVkeCxkeCsyKSwodixkeCszKSAgLy8gZHUvZHhfaSAqIHYKICAgICAgICAgICAgd2l0aCB7CiAgICAgICAgICAgICAgICBkeCA9IDQqaSszOyAvLyBTdGFydCBvZiBkZXJpdmF0aXZlcyB3cnQgaXRoIHZhcgogICAgICAgICAgICAgICAgZHVkeCA9IHUraSsxOwogICAgICAgICAgICAgICAgZHZkeCA9IHYraSsxOwogICAgICAgICAgICB9CiAgICAgICAgKQogICAgKSB3aXRoIHsKICAgICAgICBuSU4gPSAyKzIqbnZhcnM7CiAgICAgICAgbk9VVCA9IDIrNCpudmFyczsKICAgICAgICB1ID0gMTsKICAgICAgICB2ID0gdStudmFycysxOwogICAgfSA6ICoscGFyKGksIG52YXJzLCAqLCogOiArKTsKCnByb2Nlc3MgPSBvcy5vc2MoNDQwLikgPDogZ3JvdW5kVHJ1dGgsZXN0aW1hdGUgOiBsb3NzLHNpLmJ1cyhOVkFSUykKd2l0aCB7CiAgICBncm91bmRUcnV0aCA9IF8sLjUgOiAqLC0uNSA6ICs7CgogICAgTlZBUlMgPSAyOwogICAgeDEgPSBkaWZmU2xpZGVyKE5WQVJTLDEsMSwwLDEsLjEpOwogICAgeDIgPSBkaWZmU2xpZGVyKE5WQVJTLDIsMCwtMSwxLC4xKTsKICAgIGVzdGltYXRlID0gZGlmZklucHV0KE5WQVJTKSx4MSA6IGRpZmZNdWwoTlZBUlMpLHgyIDogZGlmZkFkZChOVkFSUyk7CgogICAgbG9zcyA9IHJvLmNyb3NzKDIpIDogLSA6IGFicyA8OiBhdHRhY2goaGJhcmdyYXBoKCJsb3NzIiwwLDIpKTsKfTs%3D),
-we can drag the sliders `x1` and `x2` around until we minimise the value 
-reported by the loss function, thus discovering the "hidden" parameters of the 
+we can drag the sliders `x1` and `x2` around until we minimise the value
+reported by the loss function, thus discovering the "hidden" parameters of the
 ground truth.
 
 > TODO: loss gif
@@ -354,17 +360,17 @@ For our L1-norm loss function that looks like this:
 $$
 \begin{align*}
 \mathbf{x}_{t+1} &= \mathbf{x}_t - \alpha\frac{\partial\mathcal{L}}{\partial \mathbf{x}_t} \\
-&=  \mathbf{x}_t - \alpha\frac{\partial y}{\partial \mathbf{x}_t}\frac{y-\hat{y}}{|y-\hat{y}|}.
+&= \mathbf{x}_t - \alpha\frac{\partial y}{\partial \mathbf{x}_t}\frac{y-\hat{y}}{|y-\hat{y}|}.
 \end{align*}
 $$
 
 In Faust, we can't programmatically update the value of a slider.[^3]
-What we ought to do at this point, to automate the estimation of parameter 
-values, is invert our approach; we'll use sliders for our "hidden" parameters, 
-and define a differentiable variable to represent their "learnable" 
+What we ought to do at this point, to automate the estimation of parameter
+values, is invert our approach; we'll use sliders for our "hidden" parameters,
+and define a differentiable variable to represent their "learnable"
 counterparts:
 
-[^3]: Actually, programmatic parameter updates _are_ possible via 
+[^3]: Actually, programmatic parameter updates _are_ possible via
 [Widget Modulation](https://faustdoc.grame.fr/manual/syntax/#widget-modulation),
 but changes aren't reflected in the UI.
 In the interests of keeping things intuitive and visually illustrative, we won't
@@ -373,6 +379,7 @@ use widget modulation here.
 ```faust
 diffVar(nvars,I,graph) = -~_ <: attach(graph),par(i,nvars,i+1==I);
 ```
+
 `diffVar` handles the subtraction of the scaled gradient, and we can pass it a
 bargraph to display the current parameter value.
 
@@ -408,28 +415,29 @@ with {
         : par(i,NVARS, /,alpha : * <: attach(hbargraph("gradient %i",-1e-2,1e-2)));
 };
 ```
+
 ![](./images/gaindc3.svg)
 
-Running 
+Running
 [this code](https://faustide.grame.fr/?autorun=1&voices=0&name=gain_dc_learn&inline=ZGlmZklucHV0KG52YXJzKSA9IF8scGFyKG4sbnZhcnMsMCk7CgpkaWZmU2xpZGVyKG52YXJzLEksaW5pdCxsbyxoaSxzdGVwKSA9IGhzbGlkZXIoInglSSIsaW5pdCxsbyxoaSxzdGVwKSxwYXIoaSxudmFycyxpPT1JLTEpOwoKZGlmZkFkZChudmFycykgPSByb3V0ZShuSU4sbk9VVCwKICAgICAgICAodSwxKSwodiwyKSwgLy8gdSArIHYKICAgICAgICBwYXIoaSxudmFycywKICAgICAgICAgICAgKHUraSsxLGR4KSwoditpKzEsZHgrMSkgLy8gZHUvZHhfaSArIGR2L2R4X2kKICAgICAgICAgICAgd2l0aCB7CiAgICAgICAgICAgICAgICBkeCA9IDIqaSArIDM7IC8vIFN0YXJ0IG9mIGRlcml2YXRpdmVzIHdydCBpdGggdmFyCiAgICAgICAgICAgIH0KICAgICAgICApCiAgICApIHdpdGggewogICAgICAgIG5JTiA9IDIgKyAyKm52YXJzOwogICAgICAgIG5PVVQgPSBuSU47CiAgICAgICAgdSA9IDE7CiAgICAgICAgdiA9IHUrbnZhcnMrMTsKICAgIH0gOiArLHBhcihpLCBudmFycywgKyk7CgpkaWZmTXVsKG52YXJzKSA9IHJvdXRlKG5JTixuT1VULAogICAgICAgICh1LDEpLCh2LDIpLCAvLyB1ICogdgogICAgICAgIHBhcihpLG52YXJzLAogICAgICAgICAgICAodSxkeCksKGR2ZHgsZHgrMSksICAgLy8gdSAqIGR2L2R4X2kKICAgICAgICAgICAgKGR1ZHgsZHgrMiksKHYsZHgrMykgIC8vIGR1L2R4X2kgKiB2CiAgICAgICAgICAgIHdpdGggewogICAgICAgICAgICAgICAgZHggPSA0KmkrMzsgLy8gU3RhcnQgb2YgZGVyaXZhdGl2ZXMgd3J0IGl0aCB2YXIKICAgICAgICAgICAgICAgIGR1ZHggPSB1K2krMTsKICAgICAgICAgICAgICAgIGR2ZHggPSB2K2krMTsKICAgICAgICAgICAgfQogICAgICAgICkKICAgICkgd2l0aCB7CiAgICAgICAgbklOID0gMisyKm52YXJzOwogICAgICAgIG5PVVQgPSAyKzQqbnZhcnM7CiAgICAgICAgdSA9IDE7CiAgICAgICAgdiA9IHUrbnZhcnMrMTsKICAgIH0gOiAqLHBhcihpLCBudmFycywgKiwqIDogKyk7CgpkaWZmVmFyKG52YXJzLEksZ3JhcGgpID0gLX5fIDw6IGF0dGFjaChncmFwaCkscGFyKGksbnZhcnMsaSsxPT1JKTsKCmltcG9ydCgic3RkZmF1c3QubGliIik7CgpkZWNsYXJlIG5hbWUgIkRpZmZlcmVudGlhYmxlIGdhaW4rREMiOwoKcHJvY2VzcyA9IG9zLm9zYyg0NDAuKSAKICAgIDogaGdyb3VwKCJERFNQIiwocm91dGUoMStOVkFSUywyK05WQVJTLCgxK05WQVJTLDEpLCgxK05WQVJTLDIpLHBhcihpLE5WQVJTLChpKzEsaSszKSkpIAogICAgICAgIDogdmdyb3VwKCJbMF1QYXJhbWV0ZXJzIixncm91bmRUcnV0aCxsZWFybmFibGUpCiAgICAgICAgOiByb3V0ZSgyK05WQVJTLDQrTlZBUlMsKDEsMSksKDIsMiksKDEsMyksKDIsNCkscGFyKGksTlZBUlMsKGkrMyxpKzUpKSkgCiAgICAgICAgOiB2Z3JvdXAoIlsxXUxvc3MgJiBHcmFkaWVudHMiLGxvc3MsZ3JhZGllbnRzKQogICAgKSkgfiAoISxzaS5idXMoTlZBUlMpKQp3aXRoIHsKICAgIGdyb3VuZFRydXRoID0gdmdyb3VwKCJIaWRkZW4iLCAKICAgICAgICBfLGhzbGlkZXIoIlswXWdhaW4iLC41LDAsMSwuMSkgOiAqLGhzbGlkZXIoIlsxXURDIiwtLjUsLTEsMSwuMSkgOiArCiAgICApOwoKICAgIE5WQVJTID0gMjsKCiAgICB4MSA9IGRpZmZWYXIoTlZBUlMsMSxoYmFyZ3JhcGgoIlswXWdhaW4iLCAwLCAxKSk7CiAgICB4MiA9IGRpZmZWYXIoTlZBUlMsMixoYmFyZ3JhcGgoIlsxXURDIiwgLTEsIDEpKTsKICAgIGxlYXJuYWJsZSA9IHZncm91cCgiTGVhcm5lZCIsIGRpZmZJbnB1dChOVkFSUykseDEsXyA6IGRpZmZNdWwoTlZBUlMpLHgyIDogZGlmZkFkZChOVkFSUykpOwoKICAgIGxvc3MgPSByby5jcm9zcygyKSA6IC0gOiBhYnMgPDogYXR0YWNoKGhiYXJncmFwaCgiWzFdbG9zcyIsMC4sMikpOwogICAgYWxwaGEgPSBoc2xpZGVyKCJbMF1MZWFybmluZyByYXRlIFtzY2FsZTpsb2ddIiwgMWUtNCwgMWUtNiwgMWUtMSwgMWUtNik7CiAgICBncmFkaWVudHMgPSAocm8uY3Jvc3MoMik6IC0pLHNpLmJ1cyhOVkFSUykKICAgICAgICA6IHJvdXRlKE5WQVJTKzEsMipOVkFSUysxLCgxLDEpLHBhcihpLE5WQVJTLCgxLGkqMiszKSwoaSsyLDIqaSsyKSkpCiAgICAgICAgOiAoYWJzLDFlLTEwIDogbWF4KSxwYXIoaSxOVkFSUywgKikKICAgICAgICA6IHJvdXRlKE5WQVJTKzEsTlZBUlMqMixwYXIoaSxOVkFSUywoMSwyKmkrMiksKGkrMiwyKmkrMSkpKQogICAgICAgIDogcGFyKGksTlZBUlMsIC8sYWxwaGEgOiAqIDw6IGF0dGFjaChoYmFyZ3JhcGgoImdyYWRpZW50ICVpIiwtMWUtMiwxZS0yKSkpOwp9Owo%3D)
 in the web IDE, we see the learned gain and DC values leap (more or less eagerly
 depending on the learning rate) to meet the hidden values.
 
 Note that we actually needn't compute the loss function, unless we wanted to
 use some low threshold on $\mathcal{L}$ to halt the learning process.
-Also, we're not producing any true audio output,[^4] though we could easily route
-the first signal produced by the learnable algorithm to output by modifying
-the first `route()` instance in `vgroup("DDSP",...)`.
+Also, we're not producing any true audio output,[^4] though we could easily
+route the first signal produced by the learnable algorithm to output by
+modifying the first `route()` instance in `vgroup("DDSP",...)`.
 
 [^4]: We _hear_ the signal produced by the loss function, however;
-there's plenty of fun to be had (see 
-[examples/broken-osc.dsp](./examples/broken-osc.dsp) for example) in sonifying 
-the byproducts of the learning process. 
+there's plenty of fun to be had (see
+[examples/broken-osc.dsp](./examples/broken-osc.dsp) for example) in sonifying
+the byproducts of the learning process.
 
-The example we've just considered is a pretty basic one, and if the inputs to 
-`groundTruth` and `learnable` were out of phase by, say, 25 samples, it 
+The example we've just considered is a pretty basic one, and if the inputs to
+`groundTruth` and `learnable` were out of phase by, say, 25 samples, it
 would be a lot harder to minimise the loss function.
-To work around this we might take time-domain loss over windowed chunks of 
+To work around this we might take time-domain loss over windowed chunks of
 input, or compute phase-invariant loss in the frequency domain.
 
 ## The `diff` Library
@@ -452,9 +460,11 @@ final argument.
 ### Differentiable Primitives
 
 #### Number Primitive
+
 ```faust
 df.diff(x,nvars)
 ```
+
 $$
 x \rightarrow \langle x,x' \rangle = \langle x,0 \rangle
 $$
@@ -466,12 +476,15 @@ $$
 ```faust
 process = df.diff(2*ma.PI,2);
 ```
+
 ![](./images/diffnum.svg)
 
 #### Identity Function
+
 ```faust
 df.diff(_,nvars)
 ```
+
 $$
 \langle u,u' \rangle = \langle u,u' \rangle
 $$
@@ -482,12 +495,15 @@ $$
 ```faust
 process = df.diff(_,2);
 ```
+
 ![](./images/diffwire.svg)
 
 #### Add Primitive
+
 ```faust
 df.diff(+,nvars)
 ```
+
 $$
 \langle u,u' \rangle + \langle v,v' \rangle = \langle u+v,u'+v' \rangle
 $$
@@ -498,12 +514,15 @@ $$
 ```faust
 process = df.diff(+,2);
 ```
+
 ![](./images/diffadd.svg)
 
 #### Subtract Primitive
+
 ```faust
 df.diff(-,nvars)
 ```
+
 $$
 \langle u,u' \rangle - \langle v,v' \rangle = \langle u-v,u'-v' \rangle
 $$
@@ -515,12 +534,15 @@ $$
 ```faust
 process = df.diff(-,2);
 ```
+
 ![](./images/diffsub.svg)
 
 #### Multiply Primitive
+
 ```faust
 df.diff(*,nvars)
 ```
+
 $$
 \langle u,u' \rangle \langle v,v' \rangle = \langle uv,u'v+v'u \rangle
 $$
@@ -532,12 +554,15 @@ $$
 ```faust
 process = df.diff(*,2);
 ```
+
 ![](./images/diffmul.svg)
 
 #### Divide Primitive
+
 ```faust
 df.diff(/,nvars)
 ```
+
 $$
 \frac{\langle u,u' \rangle}{\langle v,v' \rangle} = \langle \frac{u}{v}, \frac{u'v - v'u}{v^2} \rangle
 $$
@@ -552,18 +577,21 @@ uses whichever is the largest of $v^2$ and $1\times10^{-10}$.
 ```faust
 process = df.diff(/,2);
 ```
+
 ![](./images/diffdiv.svg)
 
 #### `int` Primitive
+
 ```faust  
 df.diff(int,nvars)  
 ```
+
 $$
 \text{int}\left(\langle u, u'\rangle\right) = \langle\text{int}(u), \partial \rangle, \quad
 \partial = \begin{cases}
-    u', &\sin(\pi u) = 0, u~\text{increasing} \\
-    -u', &\sin(\pi u) = 0, u~\text{decreasing} \\
-    0, &\text{otherwise.}
+u', &\sin(\pi u) = 0, u~\text{increasing} \\
+-u', &\sin(\pi u) = 0, u~\text{decreasing} \\
+0, &\text{otherwise.}
 \end{cases}
 $$
 
@@ -571,7 +599,7 @@ $$
 - Output: one dual signal consisting of the integer cast and `nvars` partial
   derivatives
 
-NB. `int` is a discontinuous function, and its derivative is impulse-like at 
+NB. `int` is a discontinuous function, and its derivative is impulse-like at
 integer values of $u$, i.e. at $\sin(\pi u) = 0$; impulses are positive for
 increasing $u$, negative for decreasing.[^5]
 
@@ -581,12 +609,15 @@ prison. Yours, Tommy._
 ```faust
 process = df.diff(int,2);
 ```
+
 ![](./images/diffint.svg)
 
 #### `mem` Primitive
+
 ```faust
 df.diff(mem,nvars)
 ```
+
 $$
 \langle u, u'\rangle[n-1] = \langle u[n-1], u'[n-1] \rangle
 $$
@@ -598,12 +629,15 @@ $$
 ```faust
 process = df.diff(mem,2);
 ```
+
 ![](./images/diffmem.svg)
 
 #### `@` Primitive
+
 ```faust
 df.diff(@,nvars)
 ```
+
 $$
 \langle u, u' \rangle[n-\langle v, v' \rangle] = \langle u[n-v], u'[n-v] - v'(u[n-v])'_n \rangle
 $$
@@ -613,7 +647,7 @@ $$
   second, and `nvars` partial derivatives of the delay expression
 
 NB. the general time-domain expression for the derivative of a delay features
-a component which is a derivative with respect to (discrete) time: 
+a component which is a derivative with respect to (discrete) time:
 $(u[n-v])'_n$.
 This component is computed asymmetrically in time, so `df.diff(@,nvars)` is of
 limited use for time-variant $v$.
@@ -622,12 +656,15 @@ It appears to behave well enough for fixed $v$.
 ```faust
 process = df.input(2),df.diff(10,2) : df.diff(@,2);
 ```
+
 ![](./images/diffdel.svg)
 
 #### `sin` Primitive
+
 ```faust
 df.diff(sin,nvars)
 ```
+
 $$
 \sin(\langle u, u'\rangle) = \langle\sin(u), u'\cos(u)\rangle
 $$
@@ -639,12 +676,15 @@ $$
 ```faust
 process = df.diff(sin,2);
 ```
+
 ![](./images/diffsin.svg)
 
 #### `cos` Primitive
+
 ```faust
 df.diff(cos,nvars)
 ```
+
 $$
 \cos(\langle u, u'\rangle) = \langle\cos(u), -u'\sin(u)\rangle
 $$
@@ -656,12 +696,15 @@ $$
 ```faust
 process = df.diff(cos,2);
 ```
+
 ![](./images/diffcos.svg)
 
 #### `tan` Primitive
+
 ```faust
 df.diff(tan,nvars)
 ```
+
 $$
 \tan(\langle u, u'\rangle) = \langle\tan(u), \frac{u'}{\cos^2(u)}\rangle
 $$
@@ -676,14 +719,17 @@ uses whichever is the largest of $\cos^2(u)$ and $1\times10^{-10}$.
 ```faust
 process = df.diff(tan,2);
 ```
+
 ![](./images/difftan.svg)
 
 ### Helper Functions
 
 #### Input Primitive
+
 ```faust
 df.input(nvars)
 ```
+
 $$
 u \rightarrow \langle u,u' \rangle = \langle u,0 \rangle
 $$
@@ -691,14 +737,17 @@ $$
 ```faust
 process = df.input(2);
 ```
+
 ![](./images/diffinput.svg)
 
 #### Differentiable Variable
+
 ```faust
 df.var(I,var,nvars)
 ```
 
 #### Differentiable Recursive Composition
+
 ```faust
 df.rec(f~g,ngrads)
 ```
@@ -709,7 +758,7 @@ Facilitates the passing of gradients into the body of the recursion.
 - Inputs:
   - `f`: A differentiable expression taking two dual signals as input and
     producing one dual signal as output.
-  - `g`: A differentiable expression taking one dual signal as input and 
+  - `g`: A differentiable expression taking one dual signal as input and
     producing one dual signal as output.
   - `ngrads`: The number of differentiable variables in `g`, i.e. the number
     of gradients to be passed into the body of the recursion.
@@ -729,23 +778,39 @@ with {
 ```
 
 #### Differentiable Phasor
+
 ```faust
 df.phasor(f0,nvars)
 ```
 
 #### Differentiable Oscillator
+
 ```faust
 df.osc(f0,nvars)
+```
+
+#### Differentiable `sum` iteration
+
+```faust
+df.sumall(nvars)
+```
+
+#### Backpropagation circuit
+
+```faust
+df.backprop(groundTruth, learnable, lossFunction)
 ```
 
 ### Loss Functions
 
 #### L1 time-domain
+
 ```faust
 df.learnL1(windowSize, learningRate, nvars)
 ```
 
 #### L2 time-domain
+
 ```faust
 df.learnL2(windowSize, learningRate, nvars)
 ```
@@ -757,3 +822,4 @@ df.learnL2(windowSize, learningRate, nvars)
 - Automatic parameter normalisation...
 - Frequency-domain loss...
 - Reverse mode autodiff...
+- Batched training data/ground truth...
