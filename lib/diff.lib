@@ -265,6 +265,33 @@ phasor(f0,nvars) = f0,diff(ma.SR,nvars)
 // f0 is a dual signal
 osc(f0,nvars) = phasor(f0,nvars) : diff(sin,nvars);
 
+// Differentiable sum iteration.
+sumall(1) = df.diff(_,1);
+sumall(2) = df.diff(+,2);
+sumall(nvars) = seq(n,nvars-2,df.diff(+,nvars),par(m,nvars-n-2,df.diff(_,nvars))) : df.diff(+,nvars);
+
+// Might not be the right name.
+backprop(groundTruth,learnable,lossFunction) = (
+    route(nvars+nInputs,nvars+nInputs,par(n,nvars,(n+1,n+3)),(nvars+1,1),(nvars+2,2))
+    : vgroup("Hidden", groundTruth),vgroup("Learned", learnable)
+    : route(2+nvars,4+nvars,
+        // Route ground truth output to loss/gradient function and to output.
+        (1,1),(1,nvars+3),
+        // Route learnable output to loss/gradient function and to output.
+        (2,2),(2,nvars+4),
+        // Route gradients to loss/gradient function.
+        par(n,nvars,(n+3,n+3))
+    )
+    : vgroup("[1]Loss/gradient", lossFunction,_,_)
+    // Feed the gradients back.
+    ) ~ (!,si.bus(nvars))
+    // Block the gradients, post-recursion.
+    : _,si.block(nvars),_,_
+with {
+    nvars = inputs(learnable),inputs(groundTruth) : -;
+    nInputs = inputs(groundTruth),2 : *;
+};
+
 //===========================================================================
 
 // Stochastic gradient descent with time-domain L2 norm loss function

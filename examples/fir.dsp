@@ -11,7 +11,7 @@ ppp = no.noise <: sum(n, NTAPS, _,n : @,bn : *
     });
 
 pppp = no.noise
-    <: par(n, NTAPS, df.input(NTAPS),df.const(n,NTAPS)
+    <: par(n, NTAPS, df.input(NTAPS),df.diff(n,NTAPS)
     : df.diff(@,NTAPS),df.var(n+1,bn,NTAPS)
     : df.diff(*,NTAPS)
     with {
@@ -19,7 +19,7 @@ pppp = no.noise
     })
     : par(n,NTAPS/2,df.diff(+,NTAPS)),par(n,NTAPS%2,df.diff(_,NTAPS)) : df.diff(+,NTAPS);
 
-p = in,in
+p = in
     : hgroup("Differentiable FIR",
         (route(NTAPS+2,NTAPS+2,par(n,NTAPS,(n+1,n+3)),(NTAPS+1,1),(NTAPS+2,2))
         : vgroup("Hidden", truth),vgroup("Learned", learnable)
@@ -35,7 +35,7 @@ p = in,in
     // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
     ) : _,si.block(NTAPS),_,_
 with{
-    in = no.noise;
+    in = no.noise <: _,_;
 
     truth = _ <: sum(n, NTAPS, _,n : @,bn : *
         with {
@@ -54,7 +54,29 @@ with{
             : seq(n,NTAPS-2,df.diff(+,NTAPS),par(m,NTAPS-n-2,df.diff(_,NTAPS))) : df.diff(+,NTAPS);
 };
 
-process = p;
+q = in <: _,_
+    : hgroup("Differentiable FIR",df.backprop(truth,learnable,df.learnL2(1<<3,1e-1,NTAPS)))
+    // : !,_,_
+with {
+    in = no.noise;
+
+    truth = _ <: sum(n, NTAPS, _,n : @,bn : *
+        with {
+            bn = hslider("b%n", sin(n), -1., 1., .001);
+        });
+
+    learnable = route(1+NTAPS,NTAPS*2,par(n,NTAPS,(1,2*n+1),(n+2,2*n+2))) :
+        par(n, NTAPS,
+            df.input(NTAPS),df.diff(n,NTAPS),_
+            : df.diff(@,NTAPS),df.var(n+1,bn,NTAPS)
+            : df.diff(*,NTAPS)
+            with {
+                bn = -~_ <: attach(hbargraph("b%n",-1,1));
+            })
+            : df.sumall(NTAPS);
+};
+
+process = q;
 
 // process = si.bus(4) : +,si.bus(2) : +,si.bus(1) : +;
 // process = seq(n,NTAPS-2,+,si.bus(NTAPS-n-2)) : +;

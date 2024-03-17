@@ -51,7 +51,7 @@ automatic differentiation.
 
 ## DDSP in Faust
 
-> Trigger warning: some basic calculus will follow
+> Trigger warning: some mild-to-moderate calculus will follow
 
 To write automatically differentiable code we need analytic expressions for the
 derivatives of the primitive operations in our program.
@@ -71,7 +71,9 @@ which yields the block diagram:
 So, the output signal, the result of Faust's `process`, which we'll call $y$, is
 the sum of two input signals, $u$ and $v$.
 
-$$y = u + v.$$
+$$
+y = u + v.
+$$
 
 Note that the addition primitive doesn't *know* anything about its arguments, 
 their origin, provenance, etc., it just consumes them and returns their sum.
@@ -132,10 +134,9 @@ we'll create one and assign it to $v$.
 $u$ and $x$ have no direct relationship, so $\frac{du}{dx}$ is $0$.
 $v$ *is* $x$, so $\frac{dv}{dx}$ is $1$.
 
-[^1]: This serves well enough for the example at hand, but in practice &mdash;
+[^1]: This serves well enough for the example at hand, but in practice &mdash; 
 in a machine learning implementation &mdash; a *learnable parameter* is more 
 like a bargraph. We'll get to that [later](#gradient-descent).
-
 ```faust
 x = hslider("x", 0, -1, 1, .1);
 u = _;
@@ -556,7 +557,7 @@ process = df.diff(/,2);
 #### `int` Primitive
 ```faust  
 df.diff(int,nvars)  
-```  
+```
 $$
 \text{int}\left(\langle u, u'\rangle\right) = \langle\text{int}(u), \partial \rangle, \quad
 \partial = \begin{cases}
@@ -711,7 +712,7 @@ Facilitates the passing of gradients into the body of the recursion.
   - `g`: A differentiable expression taking one dual signal as input and 
     producing one dual signal as output.
   - `ngrads`: The number of differentiable variables in `g`, i.e. the number
-    of gradients that must be passed into the body of the recursion
+    of gradients to be passed into the body of the recursion.
 - Outputs: One dual signal; the result of the recursion.
 
 E.g. a differentiable 1-pole filter with one parameter, the coefficient of the
