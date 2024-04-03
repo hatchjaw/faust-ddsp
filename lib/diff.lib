@@ -17,7 +17,7 @@ declare author "Thomas Rushton";
 //-----------------------------`(df.)diff(_,nvars)`-----------------------------
 // Derivative of the identity function.
 // Returns nvars+1 parallel identity functions.
-diff(_,nvars) = si.bus(nvars+1);
+diff(_,nvars) = par(i,nvars+1,_);
 
 // Differentiable addition.
 // Takes two dual numbers as input;
@@ -50,7 +50,7 @@ with {
     diffsub = route(nIN,nOUT,
         (u,1),(v,2), // u + v
         par(i,nvars,
-            (u+i+1,dx),(v+i+1,dx+1) // du/di_n + dv/di_n
+            (u+i+1,dx),(v+i+1,dx+1) // du/dx_i + dv/dx_i
             with {
                 dx = 2*i+3; // Start of derivatives wrt ith var
             }
@@ -101,8 +101,8 @@ with {
     diffdiv = route(nIN,nOUT,
         (u,1),(v,2), // u / v
         par(i,nvars,
-            (dudx,dx),(v,dx+1),   // u * dv/dx_i
-            (u,dx+2),(dvdx,dx+3)  // du/dx_i * v
+            (dudx,dx),(v,dx+1),   // du/dx_i * v
+            (u,dx+2),(dvdx,dx+3)  // u * dv/dx_i
             with {
                 dx = 4*i+3; // Start of derivatives wrt ith var
                 dudx = u+i+1;
@@ -121,6 +121,56 @@ with {
         // Divide all by v^2
         : route(nvars+1,nvars*2,par(i,nvars,(nvars+1,2*i+2),(i+1,2*(i+1)-1)))
         : par(i,nvars, /));
+};
+
+// Differentiable exponentiation
+// Takes two dual signals as input;
+// Returns the first raised to the power of the second, and partial derivatives
+// of the exponentiation.
+// <u, u'> ^ <v, v'> = <u^v, u^{v-1}*(v*u' + ln(u)*u*v')>
+//
+// NB. due to the presence of the natural log, may require that a differentiable
+// variable never equals exactly zero, e.g.
+//   var = -~_,1e-10 : + ...
+diff(^,nvars) = diffexp
+with {
+    diffexp = route(nIN,nOUT,
+        (u,1),(v,2),   // u^v
+        (u,3),(v,4),   // u^{v-1}
+        (u,5),         // u*ln(u)
+        (v,5+nvars+1), // v
+        par(i,nvars,(u+i+1,u+i+5),(v+i+1,v+i+5))
+    )
+    with {
+        nIN = 2+2*nvars;
+        nOUT = 6+2*nvars;
+        u = 1;
+        v = u+nvars+1;
+    } : ^,pds
+    with {
+        pds = (_,-(1) : pow),               // u^{v-1}
+            (_ <: _,log : *),               // u*ln(u)
+            par(i,nvars,_),_,par(i,nvars,_) // du/dx,v,dvdx
+            : _,route(nIN,nOUT,
+                par(i,nvars,
+                    (dudx,dx),(v,dx+1),      // du/dx_i * v
+                    (ulnu,dx+2),(dvdx,dx+3)  // ln(u) * u * dv/dx_i
+                with{
+                    dx = 4*i+1;
+                    dudx = ulnu+i+1;
+                    dvdx = v+i+1;
+                })
+            )
+            with {
+                nIN = 2+2*nvars;
+                nOUT = 4*nvars;
+                ulnu = 1;
+                v = ulnu+nvars+1;
+            }
+            : _,par(i,nvars,*,* : +) // v*u' + ln(u)*u*v'
+            : route(1+nvars,2*nvars,par(i,nvars,(1,2*i+1),(i+2,2*i+2)))
+            : par(i,nvars,*);        // ...*u^{v-1}
+    };
 };
 
 // Differentiable sine function

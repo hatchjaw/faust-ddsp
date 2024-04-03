@@ -12,6 +12,7 @@ DDSP experiments in Faust.
     - [Subtract Primitive](#subtract-primitive)
     - [Multiply Primitive](#multiply-primitive)
     - [Divide Primitive](#divide-primitive)
+    - [Power Primitive](#power-primitive)
     - [`int` Primitive](#int-primitive)
     - [`mem` Primitive](#mem-primitive)
     - [`@` Primitive](#-primitive)
@@ -293,7 +294,7 @@ The routing for `diffAdd` and `diffMul` is a bit more involved, but the same
 principle applies as for the univariate differentiable addition primitive.
 Our dual signal representation now consists, for each primitive, of the
 undifferentiated primitive, and, in parallel, `nvars` partial derivatives, each
-with respect to the $i$th variable of interest.
+with respect to the $i^\text{th}$ variable of interest.
 Accordingly, the differentiable slider now needs to know which value of $i$ to
 take to ensure that the appropriate combination of partial derivatives can be
 generated.
@@ -580,6 +581,27 @@ process = df.diff(/,2);
 
 ![](./images/diffdiv.svg)
 
+#### Power primitive
+
+```faust
+df.diff(^,nvars)
+```
+
+$$
+\langle u,u' \rangle^{\langle v,v' \rangle} =
+\langle u^v, u^{v-1}(vu' + uv'\ln(u)) \rangle
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the first input signal raised to the 
+  power of the second, and `nvars` partial derivatives.
+
+```faust
+process = df.diff(^,2);
+```
+
+![](./images/diffpow.svg)
+
 #### `int` Primitive
 
 ```faust  
@@ -603,8 +625,7 @@ NB. `int` is a discontinuous function, and its derivative is impulse-like at
 integer values of $u$, i.e. at $\sin(\pi u) = 0$; impulses are positive for
 increasing $u$, negative for decreasing.[^5]
 
-[^5]: _Dear mathematicians: sorry about this; please don't send me to maths
-prison. Yours, Tommy._
+[^5]: Yes, this is a bit of an abomination, mathematically-speaking.
 
 ```faust
 process = df.diff(int,2);
