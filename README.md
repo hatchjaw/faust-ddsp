@@ -28,7 +28,6 @@ DDSP experiments in Faust.
     - [`tan` Primitive](#tan-primitive)
   - [Helper Functions](#helper-functions)
     - [Input Primitive](#input-primitive)
-    - [Differentiable Variable](#differentiable-variable)
     - [Differentiable Recursion](#differentiable-recursive-composition)
     - [Differentiable Phasor](#differentiable-phasor)
     - [Differentiable Oscillator](#differentiable-oscillator)
