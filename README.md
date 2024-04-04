@@ -1,9 +1,3 @@
----
-title: Faust DDSP
-author: Thomas Rushton
-#mainfont: times
----
-
 # faust-ddsp
 
 DDSP experiments in Faust.
