@@ -1,9 +1,9 @@
 import("stdfaust.lib");
 df = library("diff.lib");
 
-NTAPS = 10;
+NTAPS = 16;
 
-p = in,in
+process = in <: _,_
     : hgroup("Differentiable FIR",
         (route(NTAPS+2,NTAPS+2,par(n,NTAPS,(n+1,n+3)),(NTAPS+1,1),(NTAPS+2,2))
         : vgroup("Hidden", truth),vgroup("Learned", learnable)
@@ -15,7 +15,7 @@ p = in,in
             // Route gradients to df.learn.
             par(n,NTAPS,(n+3,n+3))
         )
-        : vgroup("[1]Loss/gradient", df.learnL2(1<<3,1e-1,NTAPS),_,_)) ~ (!,si.bus(NTAPS))
+        : vgroup("[1]Loss/gradient", d.learnL2(1<<3,1e-1),_,_)) ~ (!,si.bus(NTAPS))
     // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
     ) : _,si.block(NTAPS),!,!
 with{
@@ -27,20 +27,17 @@ with{
 
     truth = _ <: _,hiddenDelay1,_,hiddenDelay2 : @,@ : +;
 
+    vars = df.vars(par(n,NTAPS,-~_ <: attach(hbargraph("b%2n",-1,1))));
+
+    d = df.env(vars);
+
     learnable = route(1+NTAPS,NTAPS*2,par(n,NTAPS,(1,2*n+1),(n+2,2*n+2))) :
         par(n, NTAPS,
-            df.input(NTAPS),_ : delay,coeff : multiply
+            d.input,_ : delay,coeff : multiply
             with {
-                bn = -~_ <: attach(hbargraph("b%n",-1,1));
-
-                delay = df.diff(_,NTAPS),df.diff(n,NTAPS) : df.diff(@,NTAPS);
-                coeff = df.var(n+1,bn,NTAPS);
-                multiply = df.diff(*,NTAPS);
+                delay = d.diff(_),d.diff(n) : d.diff(@);
+                coeff = vars.var(n+1);
+                multiply = d.diff(*);
             })
-            : sumAll
-            with {
-                sumAll = seq(n,NTAPS-2,df.diff(+,NTAPS),par(m,NTAPS-n-2,df.diff(_,NTAPS))) : df.diff(+,NTAPS);
-            };
+            : d.sumall(NTAPS);
 };
-
-process = p;

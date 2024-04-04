@@ -1,7 +1,6 @@
 import("stdfaust.lib");
 df = library("diff.lib");
 
-NVARS = 2;
 MAXDELAY = 100;
 
 q = df.input(NVARS),df.diff(2,NVARS) : df.diff(@,NVARS);
@@ -23,21 +22,8 @@ with {
 
 //=====================================================================================
 
-p = in,in
-    : hgroup("Differentiable delay",
-        (route(NVARS+2,NVARS+2,par(n,NVARS,(n+1,n+3)),(NVARS+1,1),(NVARS+2,2))
-        : vgroup("[0]Parameters", vgroup("Hidden", truth),vgroup("Learned", learnable))
-        : route(2+NVARS,4+NVARS,
-            // Route ground truth output to df.learn and to output.
-            (1,1),(1,NVARS+3),
-            // Route learnable output to df.learn and to output.
-            (2,2),(2,NVARS+4),
-            // Route gradients to df.learn.
-            par(n,NVARS,(n+3,n+3))
-        )
-        : vgroup("[1]Loss/gradient", learn(1<<3,2e-1,NVARS),_,_)) ~ (!,si.bus(NVARS))
-    // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
-    ) : _,si.block(NVARS),_,_
+p = in <: _,_
+    : hgroup("Differentiable delay", df.backprop(truth,learnable,d.learnL2(1<<3,2e-1)))
 with {
     in = no.noise; //os.osc(1000);
 
@@ -48,14 +34,18 @@ with {
         // _,hiddenDelay : @;
         _,hiddenDelay,hiddenGain : @,_ : *;
 
-    learnable =
-        // df.input(NVARS),df.var(1,gain,NVARS) : df.diff(*,NVARS)
-        // df.input(NVARS),df.var(1,delay,NVARS) : df.diff(@,NVARS)
-        df.input(NVARS),df.var(1,delay,NVARS),df.var(2,gain,NVARS) : df.diff(@,NVARS),df.diff(_,NVARS) : df.diff(*,NVARS)
+    vars = df.vars((delay,gain))
     with {
         delay = (-~_),0,1<<24 : max,_ : min <: attach(hbargraph("Delay", 0, MAXDELAY));
         gain = -~_ <: attach(hbargraph("Gain",0,2));
     };
+
+    d = df.env(vars);
+
+    learnable =
+        // df.input(NVARS),df.var(1,gain,NVARS) : df.diff(*,NVARS)
+        // df.input(NVARS),df.var(1,delay,NVARS) : df.diff(@,NVARS)
+        d.input,vars.var(1),vars.var(2) : d.diff(@),d.diff(_) : d.diff(*);
 
     learn(windowSize, learningRate, nvars) =
         // Window the input signals

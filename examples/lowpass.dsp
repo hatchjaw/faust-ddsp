@@ -1,20 +1,12 @@
 import("stdfaust.lib");
 df = library("diff.lib");
 
-diffVars(vars) = environment {
-    N = outputs(vars);
-    var(i) = ba.take(i,vars),pds(N,i)
-    with {
-        pds(N,i) = par(j,N,i-1==j);
-    };
-};
-
-process = in,in
+process = in <: _,_
     : hgroup("Differentiable lowpass",
-        df.backprop(groundTruth,learnable,df.learnL1(1<<0,5e-1,vars.N))
+        df.backprop(groundTruth,learnable,d.learnL1(1<<0,5e-1))
     )
 with {
-    vars = diffVars((cutoff))
+    vars = df.vars((cutoff))
     with {
         cutoff = -~_
             // Map [-1,1] to [50,20000]
@@ -27,6 +19,8 @@ with {
             }
             <: attach(hbargraph("[1]Cutoff [scale:log]",50.,20000.));
     };
+
+    d = df.env(vars);
 
     in = no.noise;
 
@@ -50,25 +44,27 @@ with {
 
     learnable = learnableLPF
     with {
-        learnableLPF = df.input(vars.N),(si.bus(vars.N) <: si.bus(vars.N*2))
-            : (df.diff(_,vars.N),si.bus(vars.N) <: (df.diff(_,vars.N),b0 : df.diff(*,vars.N)),(df.diff(mem,vars.N),b1 : df.diff(*,vars.N))),_
-            : df.diff(+,vars.N),_
+        dd = d.diff;
+
+        learnableLPF = d.input,(si.bus(vars.N) <: si.bus(vars.N*2))
+            : (dd(_),si.bus(vars.N) <: (dd(_),b0 : dd(*)),(dd(mem),b1 : dd(*))),_
+            : dd(+),_
             : route(3,4,(1,3),(2,4),(3,1),(3,2))
             : df.rec(f~g,2)
             with {
-                f = df.diff(+,vars.N);
-                g = df.diff(_,vars.N),(df.diff(0,vars.N),a1 : df.diff(-,vars.N)) : df.diff(*,vars.N);
+                f = dd(+);
+                g = dd(_),(dd(0),a1 : dd(-)) : dd(*);
             }
         with {
-            w = df.diff(2*ma.PI,vars.N),vars.var(1) : df.diff(*,vars.N);
-            c = df.diff(1,vars.N),df.diff(.5/ma.SR,vars.N),w
-                : df.diff(_,vars.N),df.diff(*,vars.N)
-                : df.diff(_,vars.N),df.diff(tan,vars.N)
-                : df.diff(/,vars.N);
-            d = df.diff(1,vars.N),c : df.diff(+,vars.N);
-            b0 = df.diff(1,vars.N),d : df.diff(/,vars.N);
-            b1 = df.diff(1,vars.N),d : df.diff(/,vars.N);
-            a1 = df.diff(1,vars.N),c,d : df.diff(-,vars.N),df.diff(_,vars.N) : df.diff(/,vars.N);
+            w = dd(2*ma.PI),vars.var(1) : dd(*);
+            c = dd(1),dd(.5/ma.SR),w
+                : dd(_),dd(*)
+                : dd(_),dd(tan)
+                : dd(/);
+            d = dd(1),c : dd(+);
+            b0 = dd(1),d : dd(/);
+            b1 = dd(1),d : dd(/);
+            a1 = dd(1),c,d : dd(-),dd(_) : dd(/);
         };
     };
 };

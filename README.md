@@ -1,3 +1,9 @@
+---
+title: Faust DDSP
+author: Thomas Rushton
+#mainfont: times
+---
+
 # faust-ddsp
 
 DDSP experiments in Faust.
@@ -5,6 +11,7 @@ DDSP experiments in Faust.
 - [What is DDSP?](#what-is-ddsp)
 - [DDSP in Faust](#ddsp-in-faust)
 - [The `diff` library](#the-diff-library)
+  - [The Autodiff Environment](#the-autodiff-environment)
   - [Differentiable Primitives](#differentiable-primitives)
     - [Number Primitive](#number-primitive)
     - [Identity Function](#identity-function)
@@ -454,16 +461,73 @@ functions for describing differentiable Faust programs.
 
 `diff` uses Faust's pattern matching feature where possible.
 
-Unless otherwise stated, all primitives and functions take `nvars`, the number
-of variables (i.e. the number of partial derivatives) in the program, as their
-final argument.
+### The Autodiff Environment
+
+To avoid having to pass the number of differentiable parameters to each
+primitive, differentiable primitives are defined within an `environment`
+expression named `df.env`.
+Begin by defining parameters with `df.vars` and then call `df.env`, passing
+in the parameters as an argument, e.g.:
+
+```faust
+df = library("diff.lib")
+...
+vars = df.vars((x1,x2))
+with {
+    x1 = -~_ <: attach(hbargraph("x1",0,1));
+    x2 = -~_ <: attach(hbargraph("x2",0,1));
+};
+
+d = df.env(vars);
+```
+
+Having defined a differentiable environment in this way, primitives can be
+called as follows, and the appropriate number of partial derivatives will be
+calculated:
+
+```faust
+process = d.diff(+);
+```
+
+Additionally, parameters themselves can be accessed with `vars.var(n)`, where
+`n` is the parameter index, starting from 1:
+
+```faust
+df = library("diff.lib");
+
+vars = df.vars((gain))
+with {
+    gain = -~_ <: attach(hbargraph("gain",0,1));
+};
+
+d = df.env(vars);
+
+process = d.input,vars.var(1) : d.diff(*);
+```
+
+The number of parameters can be accessed with `vars.N`:
+
+```faust
+...
+learnable = d.input,si.bus(vars.N) // A differentiable input, N gradients
+...
+```
 
 ### Differentiable Primitives
+
+For the examples for the primitives that follow, assume the following
+boilerplate:
+
+```faust
+df = library("diff.lib");
+vars = df.vars((x1,x2)) with { x1 = -~_; x2 = -~_; };
+d = df.env(vars);
+```
 
 #### Number Primitive
 
 ```faust
-df.diff(x,nvars)
+diff(x)
 ```
 
 $$
@@ -471,11 +535,11 @@ x \rightarrow \langle x,x' \rangle = \langle x,0 \rangle
 $$
 
 - Input: a constant numerical expression, i.e. a signal of constant value `x`
-- Output: one dual signal consisting of the constant signal and `nvars` partial
+- Output: one dual signal consisting of the constant signal and `vars.N` partial
   derivatives, which all equal $0$.
 
 ```faust
-process = df.diff(2*ma.PI,2);
+process = d.diff(2*ma.PI);
 ```
 
 ![](./images/diffnum.svg)
@@ -483,7 +547,7 @@ process = df.diff(2*ma.PI,2);
 #### Identity Function
 
 ```faust
-df.diff(_,nvars)
+diff(_)
 ```
 
 $$
@@ -494,7 +558,7 @@ $$
 - Output: the unmodified dual signal
 
 ```faust
-process = df.diff(_,2);
+process = d.diff(_);
 ```
 
 ![](./images/diffwire.svg)
@@ -502,7 +566,7 @@ process = df.diff(_,2);
 #### Add Primitive
 
 ```faust
-df.diff(+,nvars)
+diff(+)
 ```
 
 $$
@@ -510,10 +574,10 @@ $$
 $$
 
 - Input: two dual signals
-- Output: one dual signal consisting of the sum and `nvars` partial derivatives
+- Output: one dual signal consisting of the sum and `vars.N` partial derivatives
 
 ```faust
-process = df.diff(+,2);
+process = d.diff(+);
 ```
 
 ![](./images/diffadd.svg)
@@ -521,7 +585,7 @@ process = df.diff(+,2);
 #### Subtract Primitive
 
 ```faust
-df.diff(-,nvars)
+diff(-)
 ```
 
 $$
@@ -529,11 +593,11 @@ $$
 $$
 
 - Input: two dual signals
-- Output: one dual signal consisting of the difference and `nvars` partial
+- Output: one dual signal consisting of the difference and `vars.N` partial
   derivatives
 
 ```faust
-process = df.diff(-,2);
+process = d.diff(-);
 ```
 
 ![](./images/diffsub.svg)
@@ -541,7 +605,7 @@ process = df.diff(-,2);
 #### Multiply Primitive
 
 ```faust
-df.diff(*,nvars)
+diff(*)
 ```
 
 $$
@@ -549,11 +613,11 @@ $$
 $$
 
 - Input: two dual signals
-- Output: one dual signal consisting of the product and `nvars` partial
+- Output: one dual signal consisting of the product and `vars.N` partial
   derivatives
 
 ```faust
-process = df.diff(*,2);
+process = d.diff(*);
 ```
 
 ![](./images/diffmul.svg)
@@ -561,7 +625,7 @@ process = df.diff(*,2);
 #### Divide Primitive
 
 ```faust
-df.diff(/,nvars)
+diff(/)
 ```
 
 $$
@@ -569,14 +633,14 @@ $$
 $$
 
 - Input: two dual signals
-- Output: one dual signal consisting of the quotient and `nvars` partial
+- Output: one dual signal consisting of the quotient and `vars.N` partial
   derivatives
 
-NB. To prevent division by zero in the partial derivatives, `diff(/,nvars)`
+NB. To prevent division by zero in the partial derivatives, `diff(/)`
 uses whichever is the largest of $v^2$ and $1\times10^{-10}$.
 
 ```faust
-process = df.diff(/,2);
+process = d.diff(/);
 ```
 
 ![](./images/diffdiv.svg)
@@ -584,7 +648,7 @@ process = df.diff(/,2);
 #### Power primitive
 
 ```faust
-df.diff(^,nvars)
+diff(^)
 ```
 
 $$
@@ -593,11 +657,11 @@ $$
 $$
 
 - Input: two dual signals
-- Output: one dual signal consisting of the first input signal raised to the 
-  power of the second, and `nvars` partial derivatives.
+- Output: one dual signal consisting of the first input signal raised to the
+  power of the second, and `vars.N` partial derivatives.
 
 ```faust
-process = df.diff(^,2);
+process = d.diff(^);
 ```
 
 ![](./images/diffpow.svg)
@@ -605,7 +669,7 @@ process = df.diff(^,2);
 #### `int` Primitive
 
 ```faust  
-df.diff(int,nvars)  
+df.diff(int)  
 ```
 
 $$
@@ -618,7 +682,7 @@ u', &\sin(\pi u) = 0, u~\text{increasing} \\
 $$
 
 - Input: one dual signal
-- Output: one dual signal consisting of the integer cast and `nvars` partial
+- Output: one dual signal consisting of the integer cast and `vars.N` partial
   derivatives
 
 NB. `int` is a discontinuous function, and its derivative is impulse-like at
@@ -628,7 +692,7 @@ increasing $u$, negative for decreasing.[^5]
 [^5]: Yes, this is a bit of an abomination, mathematically-speaking.
 
 ```faust
-process = df.diff(int,2);
+process = d.diff(int);
 ```
 
 ![](./images/diffint.svg)
@@ -636,7 +700,7 @@ process = df.diff(int,2);
 #### `mem` Primitive
 
 ```faust
-df.diff(mem,nvars)
+df.diff(mem)
 ```
 
 $$
@@ -644,11 +708,11 @@ $$
 $$
 
 - Input: one dual signal
-- Output: one dual signal consisting of the delayed signal and `nvars` delayed
+- Output: one dual signal consisting of the delayed signal and `vars.N` delayed
   partial derivatives
 
 ```faust
-process = df.diff(mem,2);
+process = d.diff(mem);
 ```
 
 ![](./images/diffmem.svg)
@@ -656,7 +720,7 @@ process = df.diff(mem,2);
 #### `@` Primitive
 
 ```faust
-df.diff(@,nvars)
+diff(@)
 ```
 
 $$
@@ -665,17 +729,17 @@ $$
 
 - Input: two dual signals
 - Output: one dual signal consisting of the first input signal delayed by the
-  second, and `nvars` partial derivatives of the delay expression
+  second, and `vars.N` partial derivatives of the delay expression
 
 NB. the general time-domain expression for the derivative of a delay features
 a component which is a derivative with respect to (discrete) time:
 $(u[n-v])'_n$.
-This component is computed asymmetrically in time, so `df.diff(@,nvars)` is of
+This component is computed asymmetrically in time, so `diff(@)` is of
 limited use for time-variant $v$.
 It appears to behave well enough for fixed $v$.
 
 ```faust
-process = df.input(2),df.diff(10,2) : df.diff(@,2);
+process = d.input,d.diff(10) : d.diff(@);
 ```
 
 ![](./images/diffdel.svg)
@@ -683,7 +747,7 @@ process = df.input(2),df.diff(10,2) : df.diff(@,2);
 #### `sin` Primitive
 
 ```faust
-df.diff(sin,nvars)
+diff(sin)
 ```
 
 $$
@@ -691,11 +755,11 @@ $$
 $$
 
 - Input: one dual signal
-- Output: one dual signal consisting of the sine of the input and `nvars`
+- Output: one dual signal consisting of the sine of the input and `vars.N`
   partial derivatives
 
 ```faust
-process = df.diff(sin,2);
+process = d.diff(sin);
 ```
 
 ![](./images/diffsin.svg)
@@ -703,7 +767,7 @@ process = df.diff(sin,2);
 #### `cos` Primitive
 
 ```faust
-df.diff(cos,nvars)
+diff(cos)
 ```
 
 $$
@@ -711,11 +775,11 @@ $$
 $$
 
 - Input: one dual signal
-- Output: one dual signal consisting of the cosine of the input and `nvars`
+- Output: one dual signal consisting of the cosine of the input and `vars.N`
   partial derivatives
 
 ```faust
-process = df.diff(cos,2);
+process = d.diff(cos);
 ```
 
 ![](./images/diffcos.svg)
@@ -723,7 +787,7 @@ process = df.diff(cos,2);
 #### `tan` Primitive
 
 ```faust
-df.diff(tan,nvars)
+diff(tan)
 ```
 
 $$
@@ -731,14 +795,14 @@ $$
 $$
 
 - Input: one dual signal
-- Output: one dual signal consisting of the tangent of the input and `nvars`
+- Output: one dual signal consisting of the tangent of the input and `vars.N`
   partial derivatives
 
-NB. To prevent division by zero in the partial derivatives, `diff(tan,nvars)`
+NB. To prevent division by zero in the partial derivatives, `diff(tan,vars.N)`
 uses whichever is the largest of $\cos^2(u)$ and $1\times10^{-10}$.
 
 ```faust
-process = df.diff(tan,2);
+process = d.diff(tan);
 ```
 
 ![](./images/difftan.svg)
@@ -748,7 +812,7 @@ process = df.diff(tan,2);
 #### Input Primitive
 
 ```faust
-df.input(nvars)
+input
 ```
 
 $$
@@ -756,16 +820,10 @@ u \rightarrow \langle u,u' \rangle = \langle u,0 \rangle
 $$
 
 ```faust
-process = df.input(2);
+process = de.input;
 ```
 
 ![](./images/diffinput.svg)
-
-#### Differentiable Variable
-
-```faust
-df.var(I,var,nvars)
-```
 
 #### Differentiable Recursive Composition
 
@@ -789,11 +847,12 @@ E.g. a differentiable 1-pole filter with one parameter, the coefficient of the
 feedback component:
 
 ```faust
-process = gradient,df.input(2) : df.rec(f~g,1)
+process = gradient,de.input : df.rec(f~g,1)
 with {
-    f = df.diff(+,2);
-    g = df.diff(_,2),df.var(1,a,2) : df.diff(*,2);
-    a = -~_;
+    vars = df.vars((a)) with { a = -~_; };
+    de = df.env(vars);
+    f = de.diff(+);
+    g = de.diff(_),vars.var(1) : de.diff(*);
     gradient = _;
 };
 ```
@@ -801,25 +860,33 @@ with {
 #### Differentiable Phasor
 
 ```faust
-df.phasor(f0,nvars)
+phasor(f0)
 ```
 
 #### Differentiable Oscillator
 
 ```faust
-df.osc(f0,nvars)
+osc(f0)
 ```
 
 #### Differentiable `sum` iteration
 
 ```faust
-df.sumall(nvars)
+sumall(N)
 ```
 
 #### Backpropagation circuit
 
 ```faust
-df.backprop(groundTruth, learnable, lossFunction)
+backprop(groundTruth, learnable, lossFunction)
+```
+
+NB. this is defined _outside_ of the autodiff environment, e.g.:
+
+```faust
+df = library("diff.lib");
+...
+process = df.backprop(groundTruth, learnable, lossFunction);
 ```
 
 ### Loss Functions
@@ -827,18 +894,17 @@ df.backprop(groundTruth, learnable, lossFunction)
 #### L1 time-domain
 
 ```faust
-df.learnL1(windowSize, learningRate, nvars)
+learnL1(windowSize, learningRate)
 ```
 
 #### L2 time-domain
 
 ```faust
-df.learnL2(windowSize, learningRate, nvars)
+learnL2(windowSize, learningRate)
 ```
 
 ## Roadmap
 
-- We have to specify `NVARS` and manually label our variables...
 - More loss functions, optimisers, momentum...
 - Automatic parameter normalisation...
 - Frequency-domain loss...

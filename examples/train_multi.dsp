@@ -1,7 +1,7 @@
 import("stdfaust.lib");
 df = library("diff.lib");
 
-NVARS = 2;
+// Multiple training signals...
 NTRAIN = 10;
 
 rec(F~G,ngrads) = (G,si.bus(n):F)~si.bus(m)
@@ -15,17 +15,17 @@ process =
     : hgroup("DDSP",
         route(nIN,nOUT,
             // Route gradients to learnable algo.
-            par(n,NVARS,(n+1,n+2+NTRAIN)),
+            par(n,vars.N,(n+1,n+2+NTRAIN)),
             // Route training inputs to ground truth algo.
-            par(n,NTRAIN,(n+NVARS+1,n+1)),
+            par(n,NTRAIN,(n+vars.N+1,n+1)),
             // Route input to learnable algo.
-            (NVARS+NTRAIN+1,NTRAIN+1)
+            (vars.N+NTRAIN+1,NTRAIN+1)
         ) with {
-            nIN = NVARS+NTRAIN+1; 
+            nIN = vars.N+NTRAIN+1;
             nOUT = nIN;
         }
         : vgroup("Parameters",vgroup("Hidden", truth),vgroup("Learned", learnable))
-        // : si.bus(NTRAIN),(_ <: _,_),si.bus(NVARS)
+        // : si.bus(NTRAIN),(_ <: _,_),si.bus(vars.N)
         : route(nIN,nOUT,
             // Route first ground truth output to output
             (1,nOUT-1),
@@ -36,13 +36,13 @@ process =
             // Route learnable output to output
             (NTRAIN+1,nOUT),
             // Route gradients to df.learn
-            par(n,NVARS,(n+NTRAIN+2,n+NTRAIN+2))
+            par(n,vars.N,(n+NTRAIN+2,n+NTRAIN+2))
         ) with {
-            nIN = NTRAIN+NVARS+1; 
+            nIN = NTRAIN+vars.N+1;
             nOUT = nIN+2;
         }
-        : vgroup("[0]Loss & gradients", df.learnN(1<<0,5e-3,NTRAIN,NVARS)),_,_
-    ) ~ (!,si.bus(NVARS))
+        : vgroup("[0]Loss & gradients", d.learnN(1<<0,5e-3,NTRAIN)),_,_
+    ) ~ (!,si.bus(vars.N))
     // : _,si.block(NVARS),_,_
 with {
     in = no.noise;
@@ -51,17 +51,22 @@ with {
     hiddenGain = hslider("[2]Gain", .5, 0, 2, .001);
     truth = par(n,NTRAIN,+ ~ (hiddenFB,_ : *) : _,hiddenGain : *);
 
-    learnable = df.input(NVARS),par(n,NVARS,grad)
-        // Routing here doesn't generalise; maybe wrap g in an environment that contains the number of expected gradients?
-        : route(1+2*NVARS,1+2*NVARS,(1,2),par(n,NVARS,(n+2,n+3)),(NVARS+2,1),(1+2*NVARS,1+2*NVARS))
-        : rec(f~g,1),grad : h
+    vars = df.vars((a,b))
     with {
         a = -~_ : _,.99 : min <: attach(hbargraph("[50]Feedback",0,1));
         b = -~_ <: attach(hbargraph("[51]Gain",0,2));
+    };
+
+    d = df.env(vars);
+
+    learnable = d.input,par(n,vars.N,grad)
+        : route(1+2*vars.N,1+2*vars.N,(1,2),par(n,vars.N,(n+2,n+3)),(vars.N+2,1),(1+2*vars.N,1+2*vars.N))
+        : rec(f~g,1),grad : h
+    with {
         grad = _;
 
-        f = df.diff(+,NVARS);
-        g = df.diff(_,NVARS),df.var(1,a,NVARS) : df.diff(*,NVARS);
-        h = df.diff(_,NVARS),df.var(2,b,NVARS) : df.diff(*,NVARS);
+        f = d.diff(+);
+        g = d.diff(_),vars.var(1) : d.diff(*);
+        h = d.diff(_),vars.var(2) : d.diff(*);
     };
 };
