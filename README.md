@@ -16,7 +16,7 @@ DDSP experiments in Faust.
     - [Power Primitive](#power-primitive)
     - [`int` Primitive](#int-primitive)
     - [`mem` Primitive](#mem-primitive)
-    - [`@` Primitive](#-primitive)
+    - [`@` Primitive](#primitive)
     - [`sin` Primitive](#sin-primitive)
     - [`cos` Primitive](#cos-primitive)
     - [`tan` Primitive](#tan-primitive)
@@ -72,7 +72,7 @@ which yields the block diagram:
 ![](./images/add.svg)
 
 So, the output signal, the result of Faust's `process`, which we'll call $y$, is
-the sum of two input signals, $u$ and $v$.
+the sum of two input signals, $u$ and $v$:
 
 $$
 y = u + v.
@@ -532,6 +532,7 @@ $$
   derivatives, which all equal $0$.
 
 ```faust
+ma = library("maths.lib");
 process = d.diff(2*ma.PI);
 ```
 
@@ -661,8 +662,8 @@ process = d.diff(^);
 
 #### `int` Primitive
 
-```faust  
-df.diff(int)  
+```faust
+diff(int)
 ```
 
 $$
@@ -693,7 +694,7 @@ process = d.diff(int);
 #### `mem` Primitive
 
 ```faust
-df.diff(mem)
+diff(mem)
 ```
 
 $$
@@ -813,7 +814,7 @@ u \rightarrow \langle u,u' \rangle = \langle u,0 \rangle
 $$
 
 ```faust
-process = de.input;
+process = d.input;
 ```
 
 ![](./images/diffinput.svg)
@@ -821,7 +822,7 @@ process = de.input;
 #### Differentiable Recursive Composition
 
 ```faust
-df.rec(f~g,ngrads)
+rec(f~g,ngrads)
 ```
 
 A utility for supporting the creation of differentiable recursive circuits.
@@ -840,12 +841,12 @@ E.g. a differentiable 1-pole filter with one parameter, the coefficient of the
 feedback component:
 
 ```faust
-process = gradient,de.input : df.rec(f~g,1)
+process = gradient,d.input : df.rec(f~g,1)
 with {
     vars = df.vars((a)) with { a = -~_; };
-    de = df.env(vars);
-    f = de.diff(+);
-    g = de.diff(_),vars.var(1) : de.diff(*);
+    d = df.env(vars);
+    f = d.diff(+);
+    g = d.diff(_),vars.var(1) : d.diff(*);
     gradient = _;
 };
 ```
@@ -903,3 +904,4 @@ learnL2(windowSize, learningRate)
 - Frequency-domain loss...
 - Reverse mode autodiff...
 - Batched training data/ground truth...
+- Offline training &rightarrow; weights &rightarrow; real-time inference...
