@@ -6,7 +6,7 @@ df = library("diff.lib");
 
 declare name "Faust Automatic Differentiation Library";
 declare version "0.0.1";
-declare author "Thomas Rushton";
+declare author "Thomas Rushton; Advik Raj Basani";
 
 //==========================Variables of Interest===============================
 //
@@ -38,19 +38,19 @@ with {
 // Might not be the right name.
 backprop(groundTruth,learnable,lossFunction) = (
     route(nvars+nInputs,nvars+nInputs,par(n,nvars,(n+1,n+3)),(nvars+1,1),(nvars+2,2))
-    : vgroup("Hidden", groundTruth),vgroup("Learned", learnable)
-    : route(2+nvars,4+nvars,
-        // Route ground truth output to loss/gradient function and to output.
-        (1,1),(1,nvars+3),
-        // Route learnable output to loss/gradient function and to output.
-        (2,2),(2,nvars+4),
-        // Route gradients to loss/gradient function.
-        par(n,nvars,(n+3,n+3))
-    )
-    : vgroup("[1]Loss/gradient", lossFunction,_,_)
-    // Feed the gradients back.
-    ) ~ (!,si.bus(nvars))
-    // Block the gradients, post-recursion.
+        : vgroup("Hidden", groundTruth),vgroup("Learned", learnable)
+        : route(2+nvars,4+nvars,
+            // Route ground truth output to loss/gradient function and to output.
+            (1,1),(1,nvars+3),
+            // Route learnable output to loss/gradient function and to output.
+            (2,2),(2,nvars+4),
+            // Route gradients to loss/gradient function.
+            par(n,nvars,(n+3,n+3))
+        )
+        : vgroup("[1]Loss/gradient", lossFunction,_,_)
+        // Feed the gradients back.
+        ) ~ (!,si.bus(nvars))
+        // Block the gradients, post-recursion.
     : _,si.block(nvars),_,_
 with {
     nvars = inputs(learnable),inputs(groundTruth) : -;
@@ -69,6 +69,23 @@ env(vars) = environment {
     // Derivative of the identity function.
     // Returns nvars+1 parallel identity functions.
     diff(_) = par(i,vars.N+1,_);
+
+    // Derivative of the cut function.
+    // Returns the cut (basically nothing)
+    // <u, u'> = (! of u and ! of all partial derivatives)
+    diff(!) = diffcut
+    with {
+        diffcut = route(nIN, nOUT,
+        par(i, vars.N,
+            (i + 1, i + 1)
+            )
+        )
+        with {
+            nIN = 1 + vars.N;
+            nOUT = nIN;
+        }
+        : !, par(i, vars.N, !);
+    };
 
     // Differentiable addition.
     // Takes two dual numbers as input;
@@ -224,6 +241,10 @@ env(vars) = environment {
         };
     };
 
+    // Differentiable modulo function
+    // Takes a dual number as input;
+    // TODO: implement
+
     // Differentiable sine function
     // Takes a dual number as input;
     // Returns the sine of the input, and its partial derivatives.
@@ -250,6 +271,36 @@ env(vars) = environment {
         difftan = route(vars.N+1,2*vars.N+1,(1,1),par(i,vars.N,(1,2*(i+1)+1),(i+2,2*(i+1))))
                                 // Prevent division by zero
             : tan,par(i,vars.N, _,((cos <: *),1e-10 : max) : /);
+    };
+
+    // Differentiable asine function 
+    // Takes a dual number as input;
+    // Returns the asine of the input, and its derivative.
+    // asin(<u, u'>) = <asin(u), u'/sqrt(1 - u^2)>
+    diff(asin) = diffasin
+    with {
+        diffasin = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : asin, par(i, vars.N, _, (((1, (_ <: *) : -) : sqrt), 1e-10 : max) : /);
+    };
+
+    // Differentiable acosine function 
+    // Takes a dual number as input;
+    // Returns the acosine of the input, and its derivative.
+    // acos(<u, u'>) = <acos(u), -u'/sqrt(1 - u^2)>
+    diff(acos) = diffacos
+    with {
+        diffacos = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : acos, par(i, vars.N, _, (((1, (_ <: *) : -) : sqrt), 1e-10 : max) : / : *(-1));
+    };
+
+    // Differentiable atan function 
+    // Takes a dual number as input;
+    // Returns the atan of the input, and its derivative.
+    // atan(<u, u'>) = <atan(u), u'/(1 + u^2)>
+    diff(atan) = diffatan
+    with {
+        diffatan = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : atan, par(i, vars.N, _, (1, (_ <: *) : +) : /);
     };
 
     // Differentiable one-sample delay
