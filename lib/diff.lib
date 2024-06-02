@@ -353,6 +353,48 @@ env(vars) = environment {
             : sqrt, par(i, vars.N, _, (_, (_ : abs) : /): *);
     };
 
+    // Differentiable min function 
+    // Takes a dual number as input;
+    // Returns the min of the input, and its derivative.
+    // min(<u, u'>, <v, v'>) = <min(u, v), min(u', v')>
+    diff(min) = diffmin
+    with {
+        diffmin = route(nIN, nOUT, (u,1), (v,2), par(i,vars.N, (u+i+1,2*i+3), (v+i+1,2*i+4)))
+            with {
+                nIN = 2+2*vars.N;
+                nOUT = nIN;
+                u = 1;
+                v = u+vars.N+1;
+            }
+            : min, par(i, vars.N, min);
+    };
+
+    // Differentiable max function 
+    // Takes a dual number as input;
+    // Returns the max of the input, and its derivative.
+    // max(<u, u'>, <v, v'>) = <max(u, v), max(u', v')>
+    diff(max) = diffmax
+    with {
+        diffmax = route(nIN, nOUT, (u,1), (v,2), par(i,vars.N, (u+i+1,2*i+3), (v+i+1,2*i+4)))
+            with {
+                nIN = 2+2*vars.N;
+                nOUT = nIN;
+                u = 1;
+                v = u+vars.N+1;
+            }
+            : max, par(i, vars.N, max);
+    };
+
+    // Differentiable floor function
+    // Takes a dual number as input;
+    // Returns the floor of the input, and its derivative.
+    // floor(<u, u'>) = <floor(u), u'>
+    diff(floor) = difffloor
+    with {
+        difffloor = route(vars.N+1, vars.N+1, par(i,vars.N+1,(i+1,i+1)))
+            : floor, par(i, vars.N, _);
+    };
+
     // Differentiable one-sample delay
     // <u, u'>[n-1] = <u[n-1], u'[n-1]>
     diff(mem) = diffmem with{ diffmem = mem,par(i,vars.N,mem); };
