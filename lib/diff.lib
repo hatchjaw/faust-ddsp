@@ -303,6 +303,56 @@ env(vars) = environment {
             : atan, par(i, vars.N, _, (1, (_ <: *) : +) : /);
     };
 
+    // Differentiable exp function 
+    // Takes a dual number as input;
+    // Returns the exp of the input, and its derivative.
+    // exp(<u, u'>) = <exp(u), u'*exp(u)>
+    diff(exp) = diffexp
+    with {
+        diffexp = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : exp, par(i, vars.N, _, (_ : exp) : *);
+    };
+
+    // Differentiable log function 
+    // Takes a dual number as input;
+    // Returns the log of the input, and its derivative.
+    // log(<u, u'>) = <log(u), u'/u>
+    diff(log) = difflog
+    with {
+        difflog = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : log, par(i, vars.N, _, _ : /);
+    };
+
+    // Differentiable log10 function 
+    // Takes a dual number as input;
+    // Returns the log of the input, and its derivative.
+    // log10(<u, u'>) = <log10(u), u'/ulog(10)>
+    diff(log10) = difflog10
+    with {
+        difflog10 = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : log, par(i, vars.N, (_, _ : /), log(10) : /);
+    };
+
+    // Differentiable sqrt function 
+    // Takes a dual number as input;
+    // Returns the sqrt of the input, and its derivative.
+    // sqrt(<u, u'>) = <sqrt(u), u'/(2*sqrt(u))>
+    diff(sqrt) = diffsqrt
+    with {
+        diffsqrt = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : sqrt, par(i, vars.N, _, ((_ : sqrt) : *(2)): /);
+    };
+
+    // Differentiable abs function 
+    // Takes a dual number as input;
+    // Returns the abs of the input, and its derivative.
+    // abs(<u, u'>) = <abs(u), u'*u/abs(u)>
+    diff(abs) = diffabs
+    with {
+        diffabs = route(vars.N+1, 3*vars.N+1, (1,1), par(i,vars.N, (1,3*(i+1)), (1, 3*(i+1)+1), (i+2,3*(i+1)-1)))
+            : sqrt, par(i, vars.N, _, (_, (_ : abs) : /): *);
+    };
+
     // Differentiable one-sample delay
     // <u, u'>[n-1] = <u[n-1], u'[n-1]>
     diff(mem) = diffmem with{ diffmem = mem,par(i,vars.N,mem); };
