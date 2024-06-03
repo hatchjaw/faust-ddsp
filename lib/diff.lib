@@ -73,19 +73,7 @@ env(vars) = environment {
     // Derivative of the cut function.
     // Returns the cut (basically nothing)
     // <u, u'> = (! of u and ! of all partial derivatives)
-    diff(!) = diffcut
-    with {
-        diffcut = route(nIN, nOUT,
-        par(i, vars.N,
-            (i + 1, i + 1)
-            )
-        )
-        with {
-            nIN = 1 + vars.N;
-            nOUT = nIN;
-        }
-        : !, par(i, vars.N, !);
-    };
+    diff(!) = par(i, vars.N+1, _ : !);
 
     // Differentiable addition.
     // Takes two dual numbers as input;
@@ -243,7 +231,7 @@ env(vars) = environment {
 
     // Differentiable modulo function
     // Takes a dual number as input;
-    // TODO: implement
+    // Returns the 
 
     // Differentiable sine function
     // Takes a dual number as input;
@@ -356,34 +344,57 @@ env(vars) = environment {
     // Differentiable min function 
     // Takes a dual number as input;
     // Returns the min of the input, and its derivative.
-    // min(<u, u'>, <v, v'>) = <min(u, v), min(u', v')>
+    // min(<u, u'>, <v, v'>) = <min(u, v), d>
+    //                        d = { u' : (u < v) 
+    //                            { v' : (u >= v)
     diff(min) = diffmin
     with {
-        diffmin = route(nIN, nOUT, (u,1), (v,2), par(i,vars.N, (u+i+1,2*i+3), (v+i+1,2*i+4)))
-            with {
-                nIN = 2+2*vars.N;
-                nOUT = nIN;
-                u = 1;
-                v = u+vars.N+1;
-            }
-            : min, par(i, vars.N, min);
+        diffmin = route(2*(vars.N+1), 2*(vars.N+2), (1,1), (vars.N+2, 2), (1,3), (vars.N+2, 4), 
+            par(i, vars.N, ((i+2), (i+5))), par(i, vars.N, (i+vars.N+3, i+vars.N+5)))
+            : min, <, par(i, 2*vars.N, _)
+            : _, 
+            route(2*(vars.N)+1, 3*vars.N, 
+                par(i, vars.N, (1, temp_1)
+                    with {
+                        temp_1 = 3*i+1;
+                    }
+                ), 
+                par(i, vars.N, (i+2, temp_2), (i+vars.N+2, temp_2 + 1)
+                    with {
+                        temp_2 = 3*i+2;
+                    }
+                )
+            )
+            : _, par(i, vars.N, select2(_, _, _));
     };
 
     // Differentiable max function 
     // Takes a dual number as input;
     // Returns the max of the input, and its derivative.
-    // max(<u, u'>, <v, v'>) = <max(u, v), max(u', v')>
+    // max(<u, u'>, <v, v'>) = <max(u, v), d>
+    //                        d = { u' : (u >= v)
+    //                            { v' : (u < v)
     diff(max) = diffmax
     with {
-        diffmax = route(nIN, nOUT, (u,1), (v,2), par(i,vars.N, (u+i+1,2*i+3), (v+i+1,2*i+4)))
-            with {
-                nIN = 2+2*vars.N;
-                nOUT = nIN;
-                u = 1;
-                v = u+vars.N+1;
-            }
-            : max, par(i, vars.N, max);
+        diffmax = route(2*(vars.N+1), 2*(vars.N+2), (1,1), (vars.N+2, 2), (1,3), (vars.N+2, 4), 
+            par(i, vars.N, ((i+2), (i+5))), par(i, vars.N, (i+vars.N+3, i+vars.N+5)))
+            : max, >=, par(i, 2*vars.N, _)
+            : _, 
+            route(2*(vars.N)+1, 3*vars.N, 
+                par(i, vars.N, (1, temp_1)
+                    with {
+                        temp_1 = 3*i+1;
+                    }
+                ), 
+                par(i, vars.N, (i+2, temp_2), (i+vars.N+2, temp_2 + 1)
+                    with {
+                        temp_2 = 3*i+2;
+                    }
+                )
+            )
+            : _, par(i, vars.N, select2(_, _, _));
     };
+
 
     // Differentiable floor function
     // Takes a dual number as input;
