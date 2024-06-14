@@ -9,14 +9,14 @@ process = no.noise <: _,_
 
             vars = df.vars((gain))
             with {
-                gain = -~_ <: attach(hbargraph("[0] learned gain", 0, 1));
+                gain = -~_ ,ma.EPSILON : + <: attach(hbargraph("[0] learned gain", 0, 1));
             };
 
             d = df.env(vars);
-            learnable = d.input,vars.var(1)
-                        : d.diff(_),
-                        route(1+vars.N,2*(1+vars.N),
-                        par(i,1+vars.N,(i+1,i+1),(i+1,i+vars.N+1)))
-                        : d.diff(_),d.diff(^)
-                        : d.diff(*);
+            learnable = d.input,diffGain : d.diff(*)
+            with {
+                diffGain = vars.var(1) 
+                    <: d.diff(_),d.diff(cos)
+                    : d.diff(^);
+            };
         };

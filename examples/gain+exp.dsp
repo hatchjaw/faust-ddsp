@@ -9,7 +9,7 @@ process = no.noise <: _,_
 
             vars = df.vars((gain))
             with {
-                gain = -~_ <: attach(hbargraph("[0] learned gain", 0, 1));
+                gain = -~_,ma.EPSILON : + <: attach(hbargraph("[0] learned gain", 0, 1));
             };
 
             d = df.env(vars);
