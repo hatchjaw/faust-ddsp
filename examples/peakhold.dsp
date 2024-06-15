@@ -2,7 +2,7 @@ import("stdfaust.lib");
 df = library("diff.lib");
 
 process = no.noise <: _,_
-        : df.backprop(truth,learnable,df.learnL1(1<<5,1e-3))
+        : df.backprop(truth,learnable,d.learnL1(1<<5,1e-3))
         with {
             m = hslider("Mode",0,0,1,1);
             truth = (*(m),_ : max) ~ _;
@@ -13,7 +13,7 @@ process = no.noise <: _,_
             };
 
             d = df.env(vars);
-            learnable = vars.var(1), d.input : df.rec(f~g, 1)
+            learnable = vars.var(1), d.input : df.rec(f~g, 0)
             with {
                 f = d.diff(*), d.diff(_) : d.diff(max);
                 g = d.diff(_);

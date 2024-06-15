@@ -2,7 +2,7 @@ import("stdfaust.lib");
 df = library("diff.lib");
 
 process = no.noise <: _,_
-        : df.backprop(truth,learnable,df.learnL1(1<<3,1e-3))
+        : df.backprop(truth,learnable,d.learnL1(1<<3,1e-3))
         with {
             p = button("Trigger");
             truth = - ~ _ * p;
@@ -15,7 +15,7 @@ process = no.noise <: _,_
             d = df.env(vars);
             learnable = diffVars
             with {
-                diffVars = df.rec(f~g, 1);
+                diffVars = df.rec(f~g, 0);
                 f = d.diff(-);
                 g = d.input,vars.var(1) : d.diff(*);
             };
