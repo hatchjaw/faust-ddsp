@@ -653,59 +653,28 @@ env(vars) = environment {
     // Stochastic gradient descent with frequency-domain linear loss function
     learnLinearFreq(windowSize, learningRate) =
         // Window the input signals
-        par(n,2,(window,0.0)), par(n,vars.N,window) : fft_fn, par(n,vars.N,_)
-        // Calculate the difference between the ground truth and learnable outputs
-        : (ro.cross(2) : - ),pds
-        // Calculate loss (this is just for show, since there's no sensitivity threshold)
-        : (_ <: loss,_),pds
+        par(n,2+vars.N,window)
+        // loss calculation via spectral binning
+        : (loss_fn <: _,_), pds
         // Calculate gradients
         : _,gradients
         // Scale gradients by the learning rate
         : _,par(i,vars.N,_,learningRate : *)
     with {
         window = ba.slidingMean(windowSize);
-        // Get the real and imaginary components from FFTs, calculate the loss
-        fft_fn = _,_,_,_ : an.fft(2) : mag
-        with {
-            mag = ^(2), ^(2), ^(2), ^(2)
-            : +, + : sqrt, sqrt;
-        };
         // Loss function (L1 norm)
-        loss = abs <: attach(hbargraph("[100]loss",0,.05));
-        // A way to move the partial derivatives around.
-        pds = si.bus(vars.N);
-        // Calculate gradients; for L2 norm: 2 * dy/dx_i * (learnable - groundtruth)
-        gradients = _,par(i,vars.N, _,2 : *)
-            : routeall
-            : par(i,vars.N, * <: attach(hbargraph("[101]gradient %i",-.5,.5)));
-
-        // A utility to duplicate the first input for combination with all remaining inputs.
-        routeall = _,si.bus(vars.N)
-            : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
-    };
-
-    // Stochastic gradient descent with frequency-domain log loss function
-    learnLogFreq(windowSize, learningRate) =
-        // Window the input signals
-        par(n,2,(window,0.0)), par(n,vars.N,window) : fft_fn, par(n,vars.N,_)
-        // Calculate the difference between the ground truth and learnable outputs
-        : (ro.cross(2) : - ),pds
-        // Calculate loss (this is just for show, since there's no sensitivity threshold)
-        : (_ <: loss,_),pds
-        // Calculate gradients
-        : _,gradients
-        // Scale gradients by the learning rate
-        : _,par(i,vars.N,_,learningRate : *)
-    with {
-        window = ba.slidingMean(windowSize);
-        // Get the real and imaginary components from FFTs, calculate the loss
-        fft_fn = _,_,_,_ : an.fft(2) : mag
-        with {
-            mag = ^(2), ^(2), ^(2), ^(2)
-            : +, + : sqrt, sqrt : log, log;
-        };
-        // Loss function (L1 norm)
-        loss = abs <: attach(hbargraph("[100]loss",0,.05));
+        N = 1 << 4;
+        loss_fn(truth, learnable) = (truth <: _,an.rfft_analyzer_magsq(N)), (learnable <: _,an.rfft_analyzer_magsq(N))
+                : _, route(N/2+2, N/2+2, (N/2+2,1),par(i,N/2+1,(i+1,i+2))), par(i,N/2+1,_)
+                : !, !, loss_helper; 
+        // Helper (this is a bit complex to have in a single fn)
+        loss_helper = route(N+2, N+2, par(i,N/2+1,(i+1,x),(i+N/2+2,x+1)
+                with{
+                    x = 2*i+1;
+                }))
+                : par(i,N/2+1,- : ^(2)) 
+                : sum(i,N/2+1,_)
+                : /(N/2+1) : hbargraph("Loss",0,1);
         // A way to move the partial derivatives around.
         pds = si.bus(vars.N);
         // Calculate gradients; for L2 norm: 2 * dy/dx_i * (learnable - groundtruth)

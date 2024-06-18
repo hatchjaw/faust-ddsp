@@ -34,7 +34,7 @@ loss = route(N+2, N+2, par(i,N/2+1,(i+1,x),(i+N/2+2,x+1)
     with{
         x = 2*i+1;
     }))
-    : par(i,N/2+1,- : ^(2)) 
+    : par(i,N/2+1,log, log : - : abs) 
     : sum(i,N/2+1,_)
     : /(N/2+1) : hbargraph("loss",0,1);
     
