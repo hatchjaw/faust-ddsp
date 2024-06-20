@@ -2,7 +2,7 @@ import("stdfaust.lib");
 
 N = 1 << 4;
 
-in = os.square(hslider("freq [scale:log]", 500, 20, 20000, .01));
+in = os.square(hslider("freq [scale:log]", 5, 0, 10, 0.1));
 
 truth = in <: _,an.rfft_analyzer_magsq(N) 
     : route(N/2+2, N+3, (1,1), par(i, N+2, (i+2,i+2), (i+2,i+N/2+3))) 

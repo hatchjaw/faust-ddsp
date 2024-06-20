@@ -666,21 +666,26 @@ env(vars) = environment {
         N = 1 << 4;
         loss_fn(truth, learnable) = (truth <: _,an.rfft_analyzer_magsq(N)), (learnable <: _,an.rfft_analyzer_magsq(N))
                 : _, route(N/2+2, N/2+2, (N/2+2,1),par(i,N/2+1,(i+1,i+2))), par(i,N/2+1,_)
+                : _, _, par(i, N+2, _ : si.smooth(ba.tau2pole(tau)))
+                with {
+                    tau = 0.05;
+                }
                 : !, !, loss_helper; 
         // Helper (this is a bit complex to have in a single fn)
         loss_helper = route(N+2, N+2, par(i,N/2+1,(i+1,x),(i+N/2+2,x+1)
                 with{
                     x = 2*i+1;
                 }))
-                : par(i,N/2+1,- : ^(2)) 
+                : par(i,N/2+1, -) 
                 : sum(i,N/2+1,_)
                 : /(N/2+1) : hbargraph("Loss",0,1);
         // A way to move the partial derivatives around.
         pds = si.bus(vars.N);
-        // Calculate gradients; for L2 norm: 2 * dy/dx_i * (learnable - groundtruth)
-        gradients = _,par(i,vars.N, _,2 : *)
-            : routeall
-            : par(i,vars.N, * <: attach(hbargraph("[101]gradient %i",-.5,.5)));
+        // Calculate gradients; for L1 norm: dy/dx_i * (loss) / abs(loss)
+        gradients = route(vars.N+1,2*vars.N+1,(1,1),par(i,vars.N,(1,i*2+3),(i+2,2*i+2)))
+            : (abs,1e-10 : max),par(i,vars.N, *)
+            : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+2),(i+2,2*i+1)))
+            : par(i,vars.N, / <: attach(hbargraph("[101]gradient %i",-.5,.5)));
 
         // A utility to duplicate the first input for combination with all remaining inputs.
         routeall = _,si.bus(vars.N)
