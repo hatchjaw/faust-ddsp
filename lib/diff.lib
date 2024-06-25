@@ -668,13 +668,13 @@ env(vars) = environment {
                 : _, route(N/2+2, N/2+2, (N/2+2,1),par(i,N/2+1,(i+1,i+2))), par(i,N/2+1,_)
                 : !, !, loss_helper;
         // smoothing
-        smoothing = _, par(i,N/2+1,si.smooth(ba.tau2pole(0.2)));
+        smoothing = _, par(i,N/2+1,si.smooth(ba.tau2pole(0.05)));
         // Helper (this is a bit complex to have in a single fn)
         loss_helper = route(N+2, N+2, par(i,N/2+1,(i+1,x),(i+N/2+2,x+1)
                 with{
                     x = 2*i+1;
                 }))
-                : par(i,N/2+1, ro.cross(2) : - : ^(2)) 
+                : par(i,N/2+1, ro.cross(2) : -) 
                 : sum(i,N/2+1,_)
                 : /(N/2+1) <: attach(hbargraph("Loss",0,1));
         // A way to move the partial derivatives around.
