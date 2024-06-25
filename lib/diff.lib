@@ -663,7 +663,7 @@ env(vars) = environment {
     with {
         window = ba.slidingMean(windowSize);
         // Loss function (L2 norm)
-        N = 1 << 2;
+        N = 1 << 4;
         loss_fn(truth, learnable) = (truth <: _,an.rfft_analyzer_magsq(N) : smoothing), (learnable <: _,an.rfft_analyzer_magsq(N) : smoothing)
                 : _, route(N/2+2, N/2+2, (N/2+2,1),par(i,N/2+1,(i+1,i+2))), par(i,N/2+1,_)
                 : !, !, loss_helper;
@@ -674,15 +674,15 @@ env(vars) = environment {
                 with{
                     x = 2*i+1;
                 }))
-                : par(i,N/2+1, ro.cross(2) : -) 
+                : par(i,N/2+1, -) 
                 : sum(i,N/2+1,_)
                 : /(N/2+1) <: attach(hbargraph("Loss",0,1));
         // A way to move the partial derivatives around.
         pds = si.bus(vars.N);
-        // Calculate gradients; for L2 norm: dy/dx_i * (loss) * 2
-        gradients =  _,par(i,vars.N, _,2 : *)
+        // Calculate gradients; for L2 norm: loss * dy/dx_i
+        gradients =  _,par(i,vars.N, _, 1e-6 : max)
             : routeall
-            : par(i,vars.N, * <: attach(hbargraph("[101]gradient %i",-.5,.5)));
+            : par(i,vars.N, * <: attach(hbargraph("[101]gradient %i",-.01,.01)));
         // A utility to duplicate the first input for combination with all remaining inputs.
         routeall = _,si.bus(vars.N)
             : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
