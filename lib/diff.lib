@@ -58,6 +58,26 @@ with {
     nInputs = inputs(groundTruth),2 : *;
 };
 
+backpropNoInput(groundTruth,learnable,lossFunction) = (
+    route(nvars,nvars,par(n,nvars,(n+1,n+1)))
+        : vgroup("Hidden", groundTruth),vgroup("Learned", learnable)
+        : route(2+nvars,4+nvars,
+            // Route ground truth output to loss/gradient function and to output.
+            (1,1),(1,nvars+3),
+            // Route learnable output to loss/gradient function and to output.
+            (2,2),(2,nvars+4),
+            // Route gradients to loss/gradient function.
+            par(n,nvars,(n+3,n+3))
+        )
+        : vgroup("[1]Loss/gradient", lossFunction,_,_)
+        // Feed the gradients back.
+        ) ~ (!,si.bus(nvars))
+        // Block the gradients, post-recursion.
+    : _,si.block(nvars),_,_
+with {
+    nvars = inputs(learnable);
+};
+
 //========================Differentiable environment============================
 //
 //==============================================================================
