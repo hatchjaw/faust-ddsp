@@ -1202,16 +1202,28 @@ process = df.backpropNoInput(groundTruth, learnable, lossFunction);
 
 ### Loss Functions
 
-#### L1 time-domain
+#### L1 time-domain (MAE)
 
 ```faust
-learnL1(windowSize, learningRate)
+learnMAE(windowSize, learningRate)
 ```
 
-#### L2 time-domain
+#### L2 time-domain (MSE)
 
 ```faust
-learnL2(windowSize, learningRate)
+learnMSE(windowSize, learningRate)
+```
+
+#### MSLE time-domain
+
+```faust
+learnMSLE(windowSize, learningRate)
+```
+
+#### Huber time-domain
+
+```faust
+learnHuber(windowSize, learningRate, delta)
 ```
 
 ### Linear frequency-domain

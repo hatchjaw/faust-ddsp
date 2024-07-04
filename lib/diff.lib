@@ -588,7 +588,7 @@ env(vars) = environment {
     //==========================================================================
 
     // Stochastic gradient descent with time-domain L2 norm loss function
-    learnL2(windowSize, learningRate) =
+    learnMSE(windowSize, learningRate) =
         // Window the input signals
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
@@ -616,8 +616,67 @@ env(vars) = environment {
             : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
     };
 
-    // L1 norm
-    learnL1(windowSize, learningRate) =
+    // Stochastic gradient descent with time-domain mean-squared log error
+    learnMSLE(windowSize, learningRate) =
+        // Window the input signals
+        par(n,2+vars.N,window)
+        // Calculate the difference between the ground truth and learnable outputs
+        // (Is cross necessary?)
+        : _, _ <: _, _, par(i, vars.N, _)
+        : (ro.cross(2) : ((_, 1 : +) : log), ((_, 1 : +) : log) : -),_,pds
+        // Calculate loss (this is just for show, since there's no sensitivity threshold)
+        : (_ <: loss,_),(_, 1 : +),pds
+        // Calculate gradients
+        : _,gradients
+        // Scale gradients by the learning rate
+        : _,par(i,vars.N,_,learningRate : *)
+    with {
+        window = ba.slidingMean(windowSize);
+        // Loss function: MSLE
+        loss = ^(2) <: attach(hbargraph("[100]loss",0,.05));
+        // A way to move the partial derivatives around.
+        pds = si.bus(vars.N);
+        // Calculate gradients: 2 * dy/dx_i * (log(learnable + 1) - log(groundtruth + 1)) / (learnable + 1)
+        gradients = (_,_ : /),par(i,vars.N, _,2 : *)
+            : routeall
+            : par(i,vars.N, * <: attach(hbargraph("[101]gradient %i",-.5,.5)));
+
+        // A utility to duplicate the first input for combination with all remaining inputs.
+        routeall = _,si.bus(vars.N)
+            : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
+    };
+
+    // Stochastic gradient descent with time-domain Huber loss
+    learnHuber(windowSize, learningRate, delta) =
+        // Window the input signals
+        par(n,2+vars.N,window)
+        // Calculate the difference between the ground truth and learnable outputs
+        // (Is cross necessary?)
+        : (ro.cross(2) : -),pds
+        // Calculate loss (this is just for show, since there's no sensitivity threshold)
+        : (_ <: loss,_),pds
+        // Calculate gradients
+        : _,gradients
+        // Scale gradients by the learning rate
+        : _,par(i,vars.N,_,learningRate : *)
+    with {
+        window = ba.slidingMean(windowSize);
+        // Loss function: https://en.wikipedia.org/wiki/Huber_loss
+        loss = _ <: (abs : <=(delta)), (_ <: (^(2) : /(2)), (delta, (abs, (delta : /(2)) : -) : *)) : select2 <: attach(hbargraph("[100]loss",0,.05));
+        // A way to move the partial derivatives around.
+        pds = si.bus(vars.N);
+        // Calculate gradients; for this error
+        gradients = _ <: (abs : <=(delta)), (_ <: _, ((_ <: (_, abs) : /), delta : *)) : select2,par(i,vars.N, _)
+            : routeall
+            : par(i,vars.N, * <: attach(hbargraph("[101]gradient %i",-.5,.5)));
+
+        // A utility to duplicate the first input for combination with all remaining inputs.
+        routeall = _,si.bus(vars.N)
+            : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
+    };
+
+    // MAE loss
+    learnMAE(windowSize, learningRate) =
         // Window the input signals
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
