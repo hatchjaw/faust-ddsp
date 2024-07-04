@@ -583,6 +583,17 @@ env(vars) = environment {
         sumallImpl(N) = seq(n,N-2,diff(+),par(m,N-n-2,diff(_))) : diff(+);
     };
 
+    //===========================Learning Rate Schedulers=======================
+    //
+    //==========================================================================
+    // initial_lr : learning_rate_scheduler(epochs)
+    learning_rate_scheduler(epochs, delta) = _ : helper(epochs)~(_,_) : (!, _)
+        with {
+            helper(epochs) = ((_ <: _, _),_,_
+                    : _, (_ == 0, _, _ : select2)
+                    : ((_:+~1 <: attach(hbargraph("epochs", 0, 10))) <: _, _ % epochs == 0), (_ <: _, _ * exp(delta)) 
+                    : _, (select2 <: attach(hbargraph("lr", 0.0001, 0.5))));
+        };
     //===========================Loss functions=================================
     //
     //==========================================================================
@@ -741,7 +752,7 @@ env(vars) = environment {
         : _,par(i,vars.N,_,learningRate : *)
     with {
         window = ba.slidingMean(windowSize);
-        // Loss function (L2 norm)
+        // Loss function
         N = 1 << 4;
         loss_fn(truth, learnable) = (truth <: _,an.rfft_analyzer_magsq(N) : smoothing), (learnable <: _,an.rfft_analyzer_magsq(N) : smoothing)
                 : _, route(N/2+2, N/2+2, (N/2+2,1),par(i,N/2+1,(i+1,i+2))), par(i,N/2+1,_)
@@ -758,7 +769,7 @@ env(vars) = environment {
                 : /(N/2+1) <: attach(hbargraph("Loss",0,1));
         // A way to move the partial derivatives around.
         pds = si.bus(vars.N);
-        // Calculate gradients; for L2 norm: loss * dy/dx_i
+        // Calculate gradients: loss * dy/dx_i
         gradients =  _,par(i,vars.N, _, 1e-6 : max)
             : routeall
             : par(i,vars.N, * <: attach(hbargraph("[101]gradient %i",-.01,.01)));

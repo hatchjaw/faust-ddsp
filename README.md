@@ -1200,6 +1200,16 @@ df = library("diff.lib");
 process = df.backpropNoInput(groundTruth, learnable, lossFunction);
 ```
 
+### Learning Rate Scheduler
+This scheduler decays the learnable rate by $exp(delta)$ every $epoch$ iterations.
+
+Input: learning_rate, epoch, delta
+Output: resulting learning_rate
+
+```faust
+learning_rate : learning_rate_scheduler(epoch, delta)
+```
+
 ### Loss Functions
 
 #### L1 time-domain (MAE)
@@ -1227,7 +1237,7 @@ learnHuber(windowSize, learningRate, delta)
 ```
 
 ### Linear frequency-domain
-NB. This loss function works exceptionally well for the range $[140, 1350]$. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minimas. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue.
+NB. This loss function converges to the global minima for the range $[140, 1350]$. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minimas. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue.
 
 ```faust
 learnLinearFreq(windowSize, learningRate)
