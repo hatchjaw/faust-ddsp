@@ -3,7 +3,7 @@ fi = library("filters.lib");
 df = library("diff.lib");
 
 process = no.noise <: _,_
-        : df.backprop(truth,learnable,d.learnL2(1<<3,1e-3))
+        : df.backprop(truth,learnable,d.learnMSE(1<<3,1e-3))
         with {
             p = hslider("Period",0,0,1,0.01);
             truth = _ <: * : fi.avg_tau(p);

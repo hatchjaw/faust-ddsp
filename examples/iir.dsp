@@ -5,7 +5,7 @@ df = library("diff.lib");
 
 NTAPS = 3;
 
-process = in <: _,_ : hgroup("Differentiable IIR", df.backprop(truth,learnable,d.learnL2(1<<3,1e-1)))
+process = in <: _,_ : hgroup("Differentiable IIR", df.backprop(truth,learnable,d.learnMSE(1<<3,1e-1)))
 with{
     in = no.noise;
 

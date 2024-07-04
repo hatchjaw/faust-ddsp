@@ -23,7 +23,7 @@ with {
 //=====================================================================================
 
 p = in <: _,_
-    : hgroup("Differentiable delay", df.backprop(truth,learnable,d.learnL2(1<<3,2e-1)))
+    : hgroup("Differentiable delay", df.backprop(truth,learnable,d.learnMSE(1<<3,2e-1)))
 with {
     in = no.noise; //os.osc(1000);
 

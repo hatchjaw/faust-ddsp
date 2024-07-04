@@ -2,7 +2,7 @@ import("stdfaust.lib");
 df = library("diff.lib");
 
 process = no.noise <: _,_
-        : df.backprop(truth,learnable,df.learnL1(1<<5,1e-3))
+        : df.backprop(truth,learnable,df.learnMAE(1<<5,1e-3))
         with {
             rel = hslider("Release Time",0,0,1,0.01);
             truth = _, abs : env
