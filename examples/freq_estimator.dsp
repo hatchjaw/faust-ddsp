@@ -8,7 +8,8 @@ with {
     in = hslider("Frequency", 500, 0, 20000, 0.1);
     vars = df.vars((freq))
     with {
-        freq = -~_ <: attach(hbargraph("Frequency learned",0,20000));
+        freq = _ <: _, -~_ <: attach(hbargraph("Frequency learned",0,20000)) : !, _;
+        momentum = 0.9;
     };
 
     d = df.env(vars);

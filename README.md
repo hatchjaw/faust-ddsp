@@ -463,7 +463,7 @@ Begin by defining parameters with `df.vars` and then call `df.env`, passing
 in the parameters as an argument, e.g.:
 
 ```faust
-df = library("diff.lib")
+df = library("diff.lib");
 ...
 vars = df.vars((x1,x2))
 with {
@@ -556,6 +556,25 @@ process = d.diff(_);
 ```
 
 ![](./images/diffwire.svg)
+
+### Cut Primitive
+
+```faust
+diff(!)
+```
+
+$$
+\langle u,u' \rangle = \langle \rangle
+$$
+
+- Input: one dual signal
+- Output: None (no signals returned)
+
+```faust
+process = d.diff(!), _;
+```
+
+![](./images/diffcut.svg)
 
 #### Add Primitive
 
@@ -801,6 +820,304 @@ process = d.diff(tan);
 
 ![](./images/difftan.svg)
 
+#### `asin` Primitive
+
+```faust
+diff(asin)
+```
+
+$$
+\arcsin(\langle u, u'\rangle) = \langle\arcsin(u), \frac{u'}{\sqrt{1-u^2}}\rangle
+$$
+
+- Input: one dual signal
+- Output: one dual signal consisting of the arcsine of the input and `vars.N`
+  partial derivatives
+
+NB. To prevent division by zero in the partial derivatives, `diff(asin,vars.N)`
+uses whichever is the largest of $\sqrt{1-u^2}$ and $1\times10^{-10}$.
+
+```faust
+process = d.diff(asin);
+```
+
+![](./images/diffasin.svg)
+
+#### `acos` Primitive
+
+```faust
+diff(acos)
+```
+
+$$
+\arccos(\langle u, u'\rangle) = \langle\arccos(u), -\frac{u'}{\sqrt{1-u^2}}\rangle
+$$
+
+- Input: one dual signal
+- Output: one dual signal consisting of the arccosine of the input and `vars.N`
+  partial derivatives
+
+NB. To prevent division by zero in the partial derivatives, `diff(acos,vars.N)`
+uses whichever is the largest of $\sqrt{1-u^2}$ and $1\times10^{-10}$.
+
+```faust
+process = d.diff(acos);
+```
+
+![](./images/diffacos.svg)
+
+#### `atan` Primitive
+
+```faust
+diff(atan)
+```
+
+$$
+\arctan(\langle u, u'\rangle) = \langle\arctan(u), \frac{u'}{\sqrt{1+u^2}}\rangle
+$$
+
+- Input: one dual signal
+- Output: one dual signal consisting of the arctan of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(atan);
+```
+
+![](./images/diffatan.svg)
+
+#### `atan2` Primitive
+
+```faust
+diff(atan2)
+```
+
+$$
+\arctan2(\langle u, u'\rangle, \langle v, v' \rangle) = \langle\arctan2(u, v), \frac{u'v+v'u}{\sqrt{u^2+v^2}}\rangle
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the arctan2 of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(atan2);
+```
+
+![](./images/diffatan2.svg)
+
+#### `exp` Primitive
+
+```faust
+diff(exp)
+```
+
+$$
+\exp(\langle u, u'\rangle) = \langle\exp(u), u'*\exp(u)\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the exp of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(exp);
+```
+
+![](./images/diffexp.svg)
+
+#### `log` Primitive
+
+```faust
+diff(log)
+```
+
+$$
+\log(\langle u, u'\rangle) = \langle\log(u), \frac{u'}{u}\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the log of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(log);
+```
+
+![](./images/difflog.svg)
+
+#### `log10` Primitive
+
+```faust
+diff(log10)
+```
+
+$$
+\log_{10}(\langle u, u'\rangle) = \langle\log_{10}(u), \frac{u'}{u\log_{10}(u)}\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the $log_{10}$ of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(log10);
+```
+
+![](./images/difflog10.svg)
+
+#### `sqrt` Primitive
+
+```faust
+diff(sqrt)
+```
+
+$$
+\sqrt(\langle u, u'\rangle) = \langle\sqrt(u), \frac{u'}{2*\sqrt(u)}\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the sqrt of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(sqrt);
+```
+
+![](./images/diffsqrt.svg)
+
+#### `abs` Primitive
+
+```faust
+diff(abs)
+```
+
+$$
+\abs(\langle u, u'\rangle) = \langle\abs(u), u'*\frac{u}{\abs(u)}\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the abs of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(abs);
+```
+
+![](./images/diffabs.svg)
+
+#### `abs` Primitive
+
+```faust
+diff(abs)
+```
+
+$$
+\abs(\langle u, u'\rangle) = \langle\abs(u), u'*\frac{u}{\abs(u)}\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the abs of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(abs);
+```
+
+![](./images/diffabs.svg)
+
+#### `min` Primitive
+
+```faust
+diff(min)
+```
+
+$$
+\min(\langle u, u' \rangle, \langle v, v' \rangle) = \left\langle \min(u, v), d \right\rangle \\
+\text{where} \\
+d =
+\begin{cases}
+u' & \text{if } u < v \\
+v' & \text{if } u \geq v
+\end{cases}
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the min of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(min);
+```
+
+![](./images/diffmin.svg)
+
+#### `max` Primitive
+
+```faust
+diff(max)
+```
+
+$$
+\max(\langle u, u' \rangle, \langle v, v' \rangle) = \left\langle \max(u, v), d \right\rangle \\
+\text{where} \\
+d =
+\begin{cases}
+u' & \text{if } u \geq v \\
+v' & \text{if } u < v
+\end{cases}
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the max of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(max);
+```
+
+![](./images/diffmax.svg)
+
+#### `floor` Primitive
+
+```faust
+diff(floor)
+```
+
+$$
+\floor(\langle u, u'\rangle) = \langle\floor(u), u'\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the floor of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(floor);
+```
+
+![](./images/difffloor.svg)
+
+#### `ceil` Primitive
+
+```faust
+diff(ceil)
+```
+
+$$
+\ceil(\langle u, u'\rangle) = \langle\ceil(u), u'\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the floor of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(ceil);
+```
+
+![](./images/diffceil.svg)
+
 ### Helper Functions
 
 #### Input Primitive
@@ -883,6 +1200,19 @@ df = library("diff.lib");
 process = df.backprop(groundTruth, learnable, lossFunction);
 ```
 
+#### Backpropagation circuit (for when you lack inputs)
+```faust
+backpropNoInput(groundTruth, learnable, lossFunction)
+```
+
+NB. this is defined _outside_ of the autodiff environment, e.g.:
+
+```faust
+df = library("diff.lib");
+...
+process = df.backpropNoInput(groundTruth, learnable, lossFunction);
+```
+
 ### Loss Functions
 
 #### L1 time-domain
@@ -897,11 +1227,30 @@ learnL1(windowSize, learningRate)
 learnL2(windowSize, learningRate)
 ```
 
+### Linear frequency-domain
+NB. This loss function works exceptionally well for the range $[140, 1350]$. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minimas. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue.
+
+```faust
+learnLinearFreq(windowSize, learningRate)
+```
+
+### Momentum-based optimizers
+One can easily introduce the concept of momentum into their optimizer by simply modifying their variables in the diff environment to the following:
+
+```faust
+df = library("diff.lib");
+vars = df.vars((x1,x2))
+with {
+    x1 = _ : +~(_ : *(momentum)) : -~_ <: attach(hbargraph("x1",0,1));
+    x2 = _ : +~(_ : *(momentum)) : -~_<: attach(hbargraph("x2",0,1));
+    momentum = 0.9;
+};
+```
+
 ## Roadmap
 
-- More loss functions, optimisers, momentum...
+- More loss functions, optimisers...
 - Automatic parameter normalisation...
-- Frequency-domain loss...
 - Reverse mode autodiff...
 - Batched training data/ground truth...
 - Offline training &rightarrow; weights &rightarrow; real-time inference...
