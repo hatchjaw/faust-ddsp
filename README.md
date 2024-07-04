@@ -818,7 +818,7 @@ uses whichever is the largest of $\cos^2(u)$ and $1\times10^{-10}$.
 process = d.diff(tan);
 ```
 
-![](./images/difftan.svg)
+![](./images/difftan.png)
 
 #### `asin` Primitive
 
@@ -841,7 +841,7 @@ uses whichever is the largest of $\sqrt{1-u^2}$ and $1\times10^{-10}$.
 process = d.diff(asin);
 ```
 
-![](./images/diffasin.svg)
+![](./images/diffasin.png)
 
 #### `acos` Primitive
 
@@ -864,7 +864,7 @@ uses whichever is the largest of $\sqrt{1-u^2}$ and $1\times10^{-10}$.
 process = d.diff(acos);
 ```
 
-![](./images/diffacos.svg)
+![](./images/diffacos.png)
 
 #### `atan` Primitive
 
@@ -884,7 +884,7 @@ $$
 process = d.diff(atan);
 ```
 
-![](./images/diffatan.svg)
+![](./images/diffatan.png)
 
 #### `atan2` Primitive
 
@@ -904,7 +904,7 @@ $$
 process = d.diff(atan2);
 ```
 
-![](./images/diffatan2.svg)
+![](./images/diffatan2.png)
 
 #### `exp` Primitive
 
@@ -924,7 +924,7 @@ $$
 process = d.diff(exp);
 ```
 
-![](./images/diffexp.svg)
+![](./images/diffexp.png)
 
 #### `log` Primitive
 
@@ -944,7 +944,7 @@ $$
 process = d.diff(log);
 ```
 
-![](./images/difflog.svg)
+![](./images/difflog.png)
 
 #### `log10` Primitive
 
@@ -964,7 +964,7 @@ $$
 process = d.diff(log10);
 ```
 
-![](./images/difflog10.svg)
+![](./images/difflog10.png)
 
 #### `sqrt` Primitive
 
@@ -984,7 +984,7 @@ $$
 process = d.diff(sqrt);
 ```
 
-![](./images/diffsqrt.svg)
+![](./images/diffsqrt.png)
 
 #### `abs` Primitive
 
@@ -993,7 +993,7 @@ diff(abs)
 ```
 
 $$
-\abs(\langle u, u'\rangle) = \langle\abs(u), u'*\frac{u}{\abs(u)}\rangle
+|(\langle u, u'\rangle)| = \langle|u|, u'*\frac{u}{|u|}\rangle
 $$
 
 - Input: one dual signals
@@ -1004,27 +1004,7 @@ $$
 process = d.diff(abs);
 ```
 
-![](./images/diffabs.svg)
-
-#### `abs` Primitive
-
-```faust
-diff(abs)
-```
-
-$$
-\abs(\langle u, u'\rangle) = \langle\abs(u), u'*\frac{u}{\abs(u)}\rangle
-$$
-
-- Input: one dual signals
-- Output: one dual signal consisting of the abs of the input and `vars.N`
-  partial derivatives
-
-```faust
-process = d.diff(abs);
-```
-
-![](./images/diffabs.svg)
+![](./images/diffabs.png)
 
 #### `min` Primitive
 
@@ -1050,7 +1030,7 @@ $$
 process = d.diff(min);
 ```
 
-![](./images/diffmin.svg)
+![](./images/diffmin.png)
 
 #### `max` Primitive
 
@@ -1076,7 +1056,7 @@ $$
 process = d.diff(max);
 ```
 
-![](./images/diffmax.svg)
+![](./images/diffmax.png)
 
 #### `floor` Primitive
 
@@ -1085,7 +1065,7 @@ diff(floor)
 ```
 
 $$
-\floor(\langle u, u'\rangle) = \langle\floor(u), u'\rangle
+\lfloor(\langle u, u'\rangle)\rfloor = \langle\lfloor u \rfloor, u'\rangle
 $$
 
 - Input: one dual signals
@@ -1096,7 +1076,7 @@ $$
 process = d.diff(floor);
 ```
 
-![](./images/difffloor.svg)
+![](./images/difffloor.png)
 
 #### `ceil` Primitive
 
@@ -1105,7 +1085,7 @@ diff(ceil)
 ```
 
 $$
-\ceil(\langle u, u'\rangle) = \langle\ceil(u), u'\rangle
+\lceil(\langle u, u'\rangle)\rceil = \langle\lceil u \rceil, u'\rangle
 $$
 
 - Input: one dual signals
@@ -1116,7 +1096,14 @@ $$
 process = d.diff(ceil);
 ```
 
-![](./images/diffceil.svg)
+![](./images/diffceil.png)
+
+**Remainder of the primitives are defined as the following:**
+$$
+f(\langle u, u' \rangle) = \langle f(u), 0 \rangle
+$$
+
+This is due to the fact that these primitives (especially bitwise primitives and such) are not very defined in autodiff. These operators are naturally not defined in differentiation and hence its implementation will vary from case to case; as a result, this seems like the best solution to deal with the issue at the moment.
 
 ### Helper Functions
 
