@@ -633,7 +633,7 @@ env(vars) = environment {
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
         // (Is cross necessary?)
-        : _, _ <: _, _, par(i, vars.N, _)
+        : _, (_ <: _, _), par(i, vars.N, _)
         : (ro.cross(2) : ((_, 1 : +) : log), ((_, 1 : +) : log) : -),_,pds
         // Calculate loss (this is just for show, since there's no sensitivity threshold)
         : (_ <: loss,_),(_, 1 : +),pds
@@ -673,11 +673,11 @@ env(vars) = environment {
     with {
         window = ba.slidingMean(windowSize);
         // Loss function: https://en.wikipedia.org/wiki/Huber_loss
-        loss = _ <: (abs : <=(delta)), (_ <: (^(2) : /(2)), (delta, (abs, (delta : /(2)) : -) : *)) : select2 <: attach(hbargraph("[100]loss",0,.05));
+        loss = (_ <: (abs : >(delta)), (_ <: (^(2) : /(2)), (delta, (abs, (delta : /(2)) : -) : *))) : select2 <: attach(hbargraph("[100]loss",0,.05));
         // A way to move the partial derivatives around.
         pds = si.bus(vars.N);
         // Calculate gradients; for this error
-        gradients = _ <: (abs : <=(delta)), (_ <: _, ((_ <: (_, abs) : /), delta : *)) : select2,par(i,vars.N, _)
+        gradients = ((_ <: (abs : >(delta)), (_ <: _, ((_ <: (_, abs) : /), delta : *))) : select2),par(i,vars.N, _)
             : routeall
             : par(i,vars.N, * <: attach(hbargraph("[101]gradient %i",-.5,.5)));
 
