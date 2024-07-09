@@ -11,7 +11,7 @@ process = hgroup("Differentiable oscillator",
             // Route gradients to df.learn.
             par(n,vars.N,(n+3,n+3))
         )
-        : vgroup("[1]Loss/gradient", df.env(vars).learnMAE(1<<0,5e-6),_,_)) ~ (!,si.bus(vars.N))
+        : vgroup("[1]Loss/gradient", df.env(vars).learnMAE(1<<0,d.optimizeSGD(5e-6)),_,_)) ~ (!,si.bus(vars.N))
     // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
     : _,si.block(vars.N),!,_
 with {

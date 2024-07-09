@@ -13,7 +13,7 @@ process =
         : route(4+vars.N,4+vars.N,(1,1),(2,vars.N+3),(3,2),(4,vars.N+4),par(n,vars.N,(n+5,n+3)))
         // Recurse gradients
         // : learn,_,_) ~ (!,si.bus(vars.N))
-        : d.learnMSE(1<<5,.01),_,_) ~ (!,si.bus(vars.N))
+        : d.learnMSE(1<<5,d.optimizeSGD(1e-2)),_,_) ~ (!,si.bus(vars.N))
     // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
     : _,si.block(vars.N),_,_
 with {

@@ -594,12 +594,26 @@ env(vars) = environment {
                     : ((_:+~1 <: attach(hbargraph("epochs", 0, 10))) <: _, _ % epochs == 0), (_ <: _, _ * exp(delta)) 
                     : _, (select2 <: attach(hbargraph("lr", 0.0001, 0.5))));
         };
+
+    //===========================Optimizers=====================================
+    // 
+    //==========================================================================
+    // Stochastic gradient descent
+    optimizeSGD(learningRate) = par(i,vars.N,_,learningRate : *);
+    optimizeRMSProp(learningRate,rho) = par(i, vars.N, (_ <: _ , (_ :((_ : ^(2)) : *(1 - rho)) : +~(_ : *(rho))))
+        : _, (sqrt : +(ma.EPSILON)) : / : *(learningRate)); 
+    optimizeAdam(learningRate,beta1,beta2) = par(i, vars.N, (_ <: (_ : *(1 - beta1) : +~(_ : *(beta1)))
+        ,((_ : ^(2)) : *(1 - beta2) : +~(_ : *(beta2))))
+        : /(1 - beta1), /(1 - beta2)
+        : _, (sqrt : +(ma.EPSILON))
+        : / : *(learningRate));
+
     //===========================Loss functions=================================
     //
     //==========================================================================
 
     // Stochastic gradient descent with time-domain L2 norm loss function
-    learnMSE(windowSize, learningRate) =
+    learnMSE(windowSize, optimizer) =
         // Window the input signals
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
@@ -610,7 +624,7 @@ env(vars) = environment {
         // Calculate gradients
         : _,gradients
         // Scale gradients by the learning rate
-        : _,par(i,vars.N,_,learningRate : *)
+        : _,optimizer
     with {
         window = ba.slidingMean(windowSize);
         // Loss function (L2 norm)
@@ -628,7 +642,7 @@ env(vars) = environment {
     };
 
     // Stochastic gradient descent with time-domain mean-squared log error
-    learnMSLE(windowSize, learningRate) =
+    learnMSLE(windowSize,optimizer) =
         // Window the input signals
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
@@ -640,7 +654,7 @@ env(vars) = environment {
         // Calculate gradients
         : _,gradients
         // Scale gradients by the learning rate
-        : _,par(i,vars.N,_,learningRate : *)
+        : _,optimizer
     with {
         window = ba.slidingMean(windowSize);
         // Loss function: MSLE
@@ -658,7 +672,7 @@ env(vars) = environment {
     };
 
     // Stochastic gradient descent with time-domain Huber loss
-    learnHuber(windowSize, learningRate, delta) =
+    learnHuber(windowSize, optimizer, delta) =
         // Window the input signals
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
@@ -669,7 +683,7 @@ env(vars) = environment {
         // Calculate gradients
         : _,gradients
         // Scale gradients by the learning rate
-        : _,par(i,vars.N,_,learningRate : *)
+        : _,optimizer
     with {
         window = ba.slidingMean(windowSize);
         // Loss function: https://en.wikipedia.org/wiki/Huber_loss
@@ -687,7 +701,7 @@ env(vars) = environment {
     };
 
     // MAE loss
-    learnMAE(windowSize, learningRate) =
+    learnMAE(windowSize, optimizer) =
         // Window the input signals
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
@@ -697,7 +711,7 @@ env(vars) = environment {
         // Calculate gradients
         : _,gradients
         // Scale gradients by the learning rate
-        : _,par(i,vars.N,_,learningRate : *)
+        : _,optimizer
     with {
         window = ba.slidingMean(windowSize);
         // Loss function (L1 norm)
@@ -713,7 +727,7 @@ env(vars) = environment {
 
     // As above but takes batches of ground truth input.
     // Needs work...
-    learnN(windowSize, learningRate, ntrain) =
+    learnN(windowSize, optimizer, ntrain) =
         // Window the input signals
         par(n,ntrain+1+vars.N,window)
         // Calculate the difference between each training example and the learned output...
@@ -726,7 +740,7 @@ env(vars) = environment {
         // And gradients
         : _,gradients
         // Scale gradients by the learning rate
-        : _,par(i,vars.N,_,learningRate : *)
+        : _,optimizer
     with {
         window = ba.slidingMean(windowSize);
         // Loss function (L1 norm)
@@ -741,7 +755,7 @@ env(vars) = environment {
     };
 
     // Stochastic gradient descent with frequency-domain linear loss function
-    learnLinearFreq(windowSize, learningRate) =
+    learnLinearFreq(windowSize, optimizer) =
         // Window the input signals
         par(n,2+vars.N,window)
         // loss calculation via spectral binning
@@ -749,7 +763,7 @@ env(vars) = environment {
         // Calculate gradients
         : _,gradients
         // Scale gradients by the learning rate
-        : _,par(i,vars.N,_,learningRate : *)
+        : _,optimizer
     with {
         window = ba.slidingMean(windowSize);
         // Loss function

@@ -2,7 +2,7 @@ no = library("noises.lib");
 df = library("diff.lib");
 import("stdfaust.lib");
 
-process = hgroup("Differentiable gain", df.backpropNoInput(truth,learnable,d.learnLinearFreq(1<<5,1e-3)))
+process = hgroup("Differentiable gain", df.backpropNoInput(truth,learnable,d.learnLinearFreq(1<<5,d.optimizeSGD(1e-3))))
 with {
     truth = os.osc(in);
     in = hslider("Frequency", 500, 0, 20000, 0.1);

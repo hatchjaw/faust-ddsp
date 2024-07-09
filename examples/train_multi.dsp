@@ -41,7 +41,7 @@ process =
             nIN = NTRAIN+vars.N+1;
             nOUT = nIN+2;
         }
-        : vgroup("[0]Loss & gradients", d.learnN(1<<0,5e-3,NTRAIN)),_,_
+        : vgroup("[0]Loss & gradients", d.learnN(1<<0,d.optimizeSGD(5e-3),NTRAIN)),_,_
     ) ~ (!,si.bus(vars.N))
     // : _,si.block(NVARS),_,_
 with {

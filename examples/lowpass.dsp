@@ -3,7 +3,7 @@ df = library("diff.lib");
 
 process = in <: _,_
     : hgroup("Differentiable lowpass",
-        df.backprop(groundTruth,learnable,d.learnMAE(1<<0,5e-1))
+        df.backprop(groundTruth,learnable,d.learnMAE(1<<0,d.optimizeSGD(5e-1)))
     )
 with {
     vars = df.vars((cutoff))

@@ -2,7 +2,7 @@ no = library("noises.lib");
 df = library("diff.lib");
 
 process = no.noise <: _,_
-    : hgroup("Differentiable gain", df.backprop(truth,learnable,d.learnMSE(1<<0,1e-3)))
+    : hgroup("Differentiable gain", df.backprop(truth,learnable,d.learnMSE(1<<0,d.optimizeSGD(1e-3))))
 with {
     truth = _,hslider("dc",.75,-1,1,.01),2 : _,^ : +;
 
