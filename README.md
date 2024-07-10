@@ -1408,7 +1408,7 @@ The core concept of NNs is a neuron. We introduce the concept of a neuron in thi
 Since much of what we have covered deals with parameter estimation, we know that gradient descent is especially effective to do this task in DSP. The issue is the creation of a fully functioning ML model that can create accurate weights and biases to deal with tasks such as classification, regression and more. This can also be extended to more complex models such as the creation of generative models, such as autoencoders. 
 
 ### A functioning neuron
-We introduce the concept of a single functioning neuron in example `.\examples\experiments\single_neuron.dsp`. This allows us to take a single hidden layer between the input and the output. This example serves to an classification example to illustrate how Faust deals with non-linearities and how quickly epoches occur in Faust.
+We introduce the concept of a single functioning neuron in example [.\examples\experiments\single_neuron.dsp](./examples/experiments/single_neuron.dsp). This allows us to take a single hidden layer between the input and the output. This example serves to an classification example to illustrate how Faust deals with non-linearities and how quickly epoches occur in Faust.
 
 As we know, the structure of a single neuron looks something like so: 
 
