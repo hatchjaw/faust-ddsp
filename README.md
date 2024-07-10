@@ -20,16 +20,44 @@ DDSP experiments in Faust.
     - [`sin` Primitive](#sin-primitive)
     - [`cos` Primitive](#cos-primitive)
     - [`tan` Primitive](#tan-primitive)
+    - [`asin` Primitive](#asin-primitive)
+    - [`acos` Primitive](#acos-primitive)
+    - [`atan` Primitive](#atan-primitive)
+    - [`atan2` Primitive](#atan2-primitive)
+    - [`exp` Primitive](#exp-primitive)
+    - [`log` Primitive](#log-primitive)
+    - [`log10` Primitive](#log10-primitive)
+    - [`sqrt` Primitive](#sqrt-primitive)
+    - [`abs` Primitive](#abs-primitive)
+    - [`min` Primitive](#min-primitive)
+    - [`max` Primitive](#max-primitive)
+    - [`floor` Primitive](#floor-primitive)
+    - [`ceil` Primitive](#ceil-primitive)
   - [Helper Functions](#helper-functions)
     - [Input Primitive](#input-primitive)
     - [Differentiable Recursion](#differentiable-recursive-composition)
     - [Differentiable Phasor](#differentiable-phasor)
     - [Differentiable Oscillator](#differentiable-oscillator)
     - [Differentiable `sum` iteration](#differentiable-sum-iteration)
-    - [Backpropagation Circuit](#backpropagation-circuit)
+    - [ML Circuits](#ml-circuits)
+      - [Backpropagation circuit](#backpropagation-circuit)
+      - [Backpropagation circuit (for when you lack inputs)](#backpropagation-circuit-for-when-you-lack-inputs)
+      - [Loss Functions](#loss-functions)
+        - [MAE Function (Time-Domain)](#l1-time-domain-mae)
+        - [MSE Function (Time-Domain)](#l2-time-domain-mse)
+        - [MSLE Function (Time-Domain)](#msle-time-domain)
+        - [Huber Function (Time-Domain)](#huber-time-domain)
+        - [Linear Function (Frequency-Domain)](#linear-frequency-domain)
+      - [Learning Rate Scheduler](#learning-rate-scheduler)
   - [Loss Functions](#loss-functions)
     - [L1 time-domain](#l1-time-domain)
     - [L2 time-domain](#l2-time-domain)
+  - [Optimizers](#optimizers)
+    - [SGD Optimizer](#sgd-optimizer)
+    - [Adam Optimizer](#adam-optimizer)
+    - [RMSProp Optimizer](#rmsprop-optimizer)
+  - [Neural Networks](#neural-networks)
+    - [A functioning neuron](#a-functioning-neuron)
 - [Roadmap](#roadmap)
 
 ## What is DDSP?
@@ -1099,6 +1127,7 @@ process = d.diff(ceil);
 ![](./images/diffceil.png)
 
 **Remainder of the primitives are defined as the following:**
+
 $$
 f(\langle u, u' \rangle) = \langle f(u), 0 \rangle
 $$
@@ -1219,6 +1248,7 @@ learnMAE(windowSize, optimizer)
 - Output: loss, a gradient per parameter defined in the environment
 
 Mathematically, this loss function is defined as:
+
 $$
 L = |y - \hat{y}|
 $$
@@ -1226,6 +1256,7 @@ while, gradients are defined in autodiff as:
 $$
 G = \frac{y - \hat{y}}{|y - \hat{y}|} \cdot \frac{\partial y}{\partial x}
 $$
+
 where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter.
 
 ###### L2 time-domain (MSE)
@@ -1238,6 +1269,7 @@ learnMSE(windowSize, optimizer)
 - Output: loss, a gradient per parameter defined in the environment
 
 Mathematically, this loss function is defined as:
+
 $$
 L = (y - \hat{y})^2
 $$
@@ -1245,6 +1277,7 @@ while, gradients are defined in autodiff as:
 $$
 G = 2 \cdot (y - \hat{y}) \cdot \frac{\partial y}{\partial x}
 $$
+
 where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter.
 
 ###### MSLE time-domain
@@ -1257,6 +1290,7 @@ learnMSLE(windowSize, optimizer)
 - Output: loss, a gradient per parameter defined in the environment
 
 Mathematically, this loss function is defined as:
+
 $$
 L = (\log(y + 1) - \log(\hat{y} + 1))^2
 $$
@@ -1264,6 +1298,7 @@ while, gradients are defined in autodiff as:
 $$
 G = 2 \cdot \frac{\log(y + 1) - \log(\hat{y} + 1)}{y + 1} \cdot \frac{\partial y}{\partial x}
 $$
+
 where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter.
 
 ###### Huber time-domain
@@ -1276,6 +1311,7 @@ learnHuber(windowSize, optimizer, delta)
 - Output: loss, a gradient per parameter defined in the environment
 
 Mathematically, this loss function is defined as:
+
 $$
 L_\delta(y, \hat{y}) = 
 \begin{cases} 
@@ -1283,13 +1319,17 @@ L_\delta(y, \hat{y}) =
 \delta \cdot \left(|y - \hat{y}| - \frac{1}{2}\delta\right) & \text{otherwise.}
 \end{cases}
 $$
+
 while, gradients are defined in autodiff as:
+
 $$
 G_\delta(y, \hat{y}) = 
 \begin{cases} 
 (y - \hat{y})^2 * \frac{\partial y}{\partial x} & \text{for } |y - \hat{y}| \le \delta, \\ 
 \delta \cdot \left(\frac{y - \hat{y}}{|y - \hat{y}|}\right) \cdot \frac{\partial y}{\partial x} & \text{otherwise.}
-\end{cases}$$
+\end{cases}
+$$
+
 where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter; a suggested $\delta$ is 1.0.
 
 ###### Linear frequency-domain
@@ -1302,8 +1342,8 @@ learnLinearFreq(windowSize, optimizer)
 ##### Learning Rate Scheduler
 This scheduler decays the learnable rate by $exp(delta)$ every $epoch$ iterations.
 
-Input: learning_rate, epoch, delta
-Output: resulting learning_rate
+- Input: learning_rate, epoch, delta
+- Output: resulting learning_rate
 
 ```faust
 learning_rate : learning_rate_scheduler(epoch, delta)
@@ -1359,8 +1399,8 @@ An implementation of any of the above optimizers can be seen below:
 df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizeSGD(1e-3)))
 ```
 
-[^6] https://arxiv.org/abs/1412.6980
-[^7] https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
+[^6]: https://arxiv.org/abs/1412.6980
+[^7]: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
 
 ## Neural Networks
 The core concept of NNs is a neuron. We introduce the concept of a neuron in this library. Backpropagation is a difficult in a functional language, such as Faust. 
@@ -1380,6 +1420,7 @@ In Faust, this looks something like this, along with the backpropagation algorit
 
 So, what exactly happens in a neuron? Say we use a sigmoid function as a non-linear activation function in this example.
 The hidden layer calculates the following:
+
 $$
 a_{1} = w1 \cdot x1 + w2 \cdot x2 + w3 \cdot x3 \\
 
@@ -1387,15 +1428,19 @@ y = \sigma(a_{1})
 $$
 
 Mathematically, the backpropagation algorithm, even for a single neuron, is complex. This example utilizes the MAE / L1-norm loss function. The loss is represented as:
+
 $$
 L = |y - \hat{y}|
 $$
 
 This seems simple enough, but for defining the gradients, we need to define:
+
 $$
 G_{i} = \frac{\partial L}{\partial w_{i}}
 $$
+
 This needs to further simplified for our usage via chain rule:
+
 $$
 G_{i} = \frac{\partial L}{\partial w_{i}} = \frac{\partial L}{\partial y} \cdot \frac{\partial y}{\partial a_{1}} \cdot \frac{\partial a_{1}}{\partial w_{i}} \\
 $$
