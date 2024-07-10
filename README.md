@@ -1168,12 +1168,15 @@ osc(f0)
 ```
 
 #### Differentiable `sum` iteration
+A utility function used to iterate `N` times through a summation of dual signals.
 
 ```faust
 sumall(N)
 ```
 
-#### Backpropagation circuit
+#### ML Circuits
+##### Backpropagation circuit
+This backpropagation circuit is exclusively for _parameter estimation_ and it functions via the creation of gradients and a loss function in order to guide the `learnable` parameter to the `groundTruth`. The available loss functions can be found below.
 
 ```faust
 backprop(groundTruth, learnable, lossFunction)
@@ -1187,7 +1190,7 @@ df = library("diff.lib");
 process = df.backprop(groundTruth, learnable, lossFunction);
 ```
 
-#### Backpropagation circuit (for when you lack inputs)
+##### Backpropagation circuit (for when you lack inputs)
 ```faust
 backpropNoInput(groundTruth, learnable, lossFunction)
 ```
@@ -1200,7 +1203,103 @@ df = library("diff.lib");
 process = df.backpropNoInput(groundTruth, learnable, lossFunction);
 ```
 
-### Learning Rate Scheduler
+##### Loss Functions
+
+This loss function requires a windowSize that allows Faust to record the (ba.)slidingMean of the last `windowSize` inputs to the loss function. This allows the input to be averaged over a small period of time and avoid random spikes of inputs or inconsistencies in signals. This loss function also calculates the loss as well the gradients to guide the `learnable` parameter to the required `truth` parameter.
+
+Furthermore, `optimizer` can be substituted with a scheduler as listed below. 
+
+###### L1 time-domain (MAE)
+
+```faust
+learnMAE(windowSize, optimizer)
+```
+
+- Input: windowSize, optimizer
+- Output: loss, a gradient per parameter defined in the environment
+
+Mathematically, this loss function is defined as:
+$$
+L = |y - \hat{y}|
+$$
+while, gradients are defined in autodiff as:
+$$
+G = \frac{y - \hat{y}}{|y - \hat{y}|} \cdot \frac{\partial y}{\partial x}
+$$
+where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter.
+
+###### L2 time-domain (MSE)
+
+```faust
+learnMSE(windowSize, optimizer)
+```
+
+- Input: windowSize, optimizer
+- Output: loss, a gradient per parameter defined in the environment
+
+Mathematically, this loss function is defined as:
+$$
+L = (y - \hat{y})^2
+$$
+while, gradients are defined in autodiff as:
+$$
+G = 2 \cdot (y - \hat{y}) \cdot \frac{\partial y}{\partial x}
+$$
+where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter.
+
+###### MSLE time-domain
+
+```faust
+learnMSLE(windowSize, optimizer)
+```
+
+- Input: windowSize, optimizer
+- Output: loss, a gradient per parameter defined in the environment
+
+Mathematically, this loss function is defined as:
+$$
+L = (\log(y + 1) - \log(\hat{y} + 1))^2
+$$
+while, gradients are defined in autodiff as:
+$$
+G = 2 \cdot \frac{\log(y + 1) - \log(\hat{y} + 1)}{y + 1} \cdot \frac{\partial y}{\partial x}
+$$
+where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter.
+
+###### Huber time-domain
+
+```faust
+learnHuber(windowSize, optimizer, delta)
+```
+
+- Input: windowSize, optimizer, delta
+- Output: loss, a gradient per parameter defined in the environment
+
+Mathematically, this loss function is defined as:
+$$
+L_\delta(y, \hat{y}) = 
+\begin{cases} 
+\frac{1}{2}(y - \hat{y})^2 & \text{for } |y - \hat{y}| \le \delta, \\ 
+\delta \cdot \left(|y - \hat{y}| - \frac{1}{2}\delta\right) & \text{otherwise.}
+\end{cases}
+$$
+while, gradients are defined in autodiff as:
+$$
+G_\delta(y, \hat{y}) = 
+\begin{cases} 
+(y - \hat{y})^2 * \frac{\partial y}{\partial x} & \text{for } |y - \hat{y}| \le \delta, \\ 
+\delta \cdot \left(\frac{y - \hat{y}}{|y - \hat{y}|}\right) \cdot \frac{\partial y}{\partial x} & \text{otherwise.}
+\end{cases}$$
+where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter; a suggested $\delta$ is 1.0.
+
+###### Linear frequency-domain
+NB. This loss function converges to the global minima for the range $[140, 1350]$. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minimas. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue. We report that RMSProp seems to break out of the minima at some threshold and it seems to train well until another minima. As a result, we suspect that the loss landscape is a series of plateaus and hence, a suitable learning rate scheduler (such as, an oscillating learning rate) and a good optimizer is required to solve this problem.
+
+```faust
+learnLinearFreq(windowSize, optimizer)
+```
+
+##### Learning Rate Scheduler
 This scheduler decays the learnable rate by $exp(delta)$ every $epoch$ iterations.
 
 Input: learning_rate, epoch, delta
@@ -1210,40 +1309,12 @@ Output: resulting learning_rate
 learning_rate : learning_rate_scheduler(epoch, delta)
 ```
 
-### Loss Functions
+NB. We plan to implement other schedulers such as cosine decay and more.
 
-#### L1 time-domain (MAE)
+##### Optimizers
+Optimizers are algorithms or methods used in ML to adjust the learning rate / gradients of a model in order to minimize the loss function. 
 
-```faust
-learnMAE(windowSize, learningRate)
-```
-
-#### L2 time-domain (MSE)
-
-```faust
-learnMSE(windowSize, learningRate)
-```
-
-#### MSLE time-domain
-
-```faust
-learnMSLE(windowSize, learningRate)
-```
-
-#### Huber time-domain
-
-```faust
-learnHuber(windowSize, learningRate, delta)
-```
-
-### Linear frequency-domain
-NB. This loss function converges to the global minima for the range $[140, 1350]$. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minimas. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue.
-
-```faust
-learnLinearFreq(windowSize, learningRate)
-```
-
-### Momentum-based optimizers
+###### Momentum-based optimizers
 One can easily introduce the concept of momentum into their optimizer by simply modifying their variables in the diff environment to the following:
 
 ```faust
@@ -1256,9 +1327,98 @@ with {
 };
 ```
 
-## Roadmap
+We suggest the use of this only when using SGD as the optimizer.
 
-- More loss functions, optimisers...
+###### SGD Optimizer
+This is a regular stochastic gradient descent optimizer which does not account for an adaptive learning rate. This performs pure gradient descent.
+
+```faust
+optimizeSGD(learningRate)
+```
+
+###### Adam Optimizer
+This is an optimizer, implemented as per the original Adam paper[^6].
+
+```faust
+optimizeAdam(learningRate, beta1, beta2)
+```
+
+We recommend beta1 and beta2 to be 0.9 and 0.999; similar to Kera's recommendations.
+
+###### RMSProp Optimizer
+This is an optimizer, implemented as per the original RMSProp presentation[^7].
+
+```faust
+optimizeRMSProp(learningRate, rho)
+```
+We recommend rho to be 0.9; similar to Kera's recommendations.
+
+An implementation of any of the above optimizers can be seen below:
+
+```faust
+df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizeSGD(1e-3)))
+```
+
+[^6] https://arxiv.org/abs/1412.6980
+[^7] https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
+
+## Neural Networks
+The core concept of NNs is a neuron. We introduce the concept of a neuron in this library. Backpropagation is a difficult in a functional language, such as Faust. 
+
+Since much of what we have covered deals with parameter estimation, we know that gradient descent is especially effective to do this task in DSP. The issue is the creation of a fully functioning ML model that can create accurate weights and biases to deal with tasks such as classification, regression and more. This can also be extended to more complex models such as the creation of generative models, such as autoencoders. 
+
+### A functioning neuron
+We introduce the concept of a single functioning neuron in example `.\examples\experiments\single_neuron.dsp`. This allows us to take a single hidden layer between the input and the output. This example serves to an classification example to illustrate how Faust deals with non-linearities and how quickly epoches occur in Faust.
+
+As we know, the structure of a single neuron looks something like so: 
+
+![](./images/single_neuron.png)
+
+In Faust, this looks something like this, along with the backpropagation algorithm:
+
+![](./images/example_neuron.png)
+
+So, what exactly happens in a neuron? Say we use a sigmoid function as a non-linear activation function in this example.
+The hidden layer calculates the following:
+$$
+a_{1} = w1 \cdot x1 + w2 \cdot x2 + w3 \cdot x3 \\
+
+y = \sigma(a_{1})
+$$
+
+Mathematically, the backpropagation algorithm, even for a single neuron, is complex. This example utilizes the MAE / L1-norm loss function. The loss is represented as:
+$$
+L = |y - \hat{y}|
+$$
+
+This seems simple enough, but for defining the gradients, we need to define:
+$$
+G_{i} = \frac{\partial L}{\partial w_{i}}
+$$
+This needs to further simplified for our usage via chain rule:
+$$
+G_{i} = \frac{\partial L}{\partial w_{i}} = \frac{\partial L}{\partial y} \cdot \frac{\partial y}{\partial a_{1}} \cdot \frac{\partial a_{1}}{\partial w_{i}} \\
+$$
+
+$$
+\frac{\partial L}{\partial y} = \frac{y - \hat{y}}{|y - \hat{y}|} \\
+$$
+
+$$
+\frac{\partial y}{\partial a_{1}} = \frac{\partial (\sigma(a_{1}))}{\partial a_{1}} = \sigma(a_{1}) \cdot (1 - \sigma(a_{1})) \\
+$$
+
+$$ 
+\frac{\partial a_{1}}{\partial w_{i}} = x_{i} \\
+$$
+
+This is pretty complex. Imagine the complexity for more deeper layers! You would have chains of chains of chains ... rules. As a result, there is a definite need for a generalization for such gradients.
+
+NB. Faust's system of running epoches is very quick (it reaches 20000 epoches in about 10 seconds) and hence the chance of overfitting is very high in this example. 
+
+## Roadmap
+- A dataset creation / storage method...
+- A more generalized method for calculating gradients for weights in neurons...
 - Automatic parameter normalisation...
 - Reverse mode autodiff...
 - Batched training data/ground truth...
