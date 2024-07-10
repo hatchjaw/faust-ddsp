@@ -1422,8 +1422,10 @@ So, what exactly happens in a neuron? Say we use a sigmoid function as a non-lin
 The hidden layer calculates the following:
 
 $$
-a_{1} = w1 \cdot x1 + w2 \cdot x2 + w3 \cdot x3 \\
+a_{1} = w1 \cdot x1 + w2 \cdot x2 + w3 \cdot x3
+$$
 
+$$
 y = \sigma(a_{1})
 $$
 
