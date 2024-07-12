@@ -1,7 +1,7 @@
 import("stdfaust.lib");
 
-N = 3; // hidden inputs
-learningRate = 0.1;
+N = 2; // hidden inputs
+learningRate = 0.0001;
 
 // input-label vars
 in = par(i, N, hslider("input%i", -0.2, -1, 1, 0.001));
@@ -51,7 +51,7 @@ process = vgroup("Output layer [one neuron]", (in, weights(N) : neuron(N))
         : (_ <: _, dSigmoid), par(i, N, _)
         : (-(label) <: lossL1, dLossL1), _, par(i, N, _)
         : vgroup("backprop", _, *, par(i, N, _) : _, routeGrads : _, par(i, N, *)))
-        ~(si.block(1), _, _, _)
+        ~(si.block(1), par(i, N, _))
         with {
             routeGrads = route(N+1, 2*N, par(i, N, (1, dx), (i+2, dx+1)
                     with {
