@@ -12,14 +12,14 @@ epoch_calculator = (_ ~ +(1)) : ((_ % 10000 == 0),0,1 : select2) <: +(_)~_, _
                 : (_ <: attach(hbargraph("epochs", 0, 100))), _;  
 
 // a simulation of how a dataset would look
-// NB. maybe a generalized way to change the label can be figured out, depending on the number of epochs (atm: every sample is available for N_eps epochs)
+// NB. maybe a generalized way to change the label can be figured out, depending on the number of epochs (atm: every sample is training on for N_eps epochs)
 // Outputs: sample, label (0 = osc, 1 = square), change_bit
 dataset_generator(change_bit) = change_bit <: _, _
                                 : (change_bit, 0, 1 : select2), _
                                 : (+(_)~((_ <: _ % N_eps == 0, _), 0 : select2)), _
                                 : (_ <: attach(hbargraph("local-epoch", 0, 10))), _
                                 : (((_ % N_eps == 0, 0, 1) : select2) : ba.toggle <: attach(hbargraph("label", 0, 1))), _
-                                : (_ <: (_, os.osc(440), os.square(440) : select2), _), _;
+                                : (_ <: (_, 0, 1 : select2), _), _;
 
 // n = number of features
 // in = input signal (n size)
