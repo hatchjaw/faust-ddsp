@@ -1468,6 +1468,8 @@ A major issue one can notice is that reverse-mode autodiff is something that doe
 ### Fully Connected Block
 Let's begin with the math involved with the forward-pass and the backward-pass in a fully connected layer. Let's first begin with a simple example of a single neuron in the FC block.
 
+![](./images/diff-singlefc.png)
+
 This example involves 5 signals passing through the neuron (2 weights, 1 bias, 2 inputs). We will denote weights as $w$, biases as $b$ and inputs as $x$.
 
 In this example, let us assume the incoming signals to be $w1, w2, b, x1, x2$. The neuron appropriately routes these parameters for backpropagation. As stated earlier, backpropagation would just include the following:
@@ -1487,6 +1489,8 @@ $$
 Mathematically speaking, we can expect $2N+2$ signals as a output from an FC, assuming $N$ inputs. Since this example is pretty simple, we can simply backpropagate the gradients of $w1, w2, b$ with respect to L to the FC.
 
 Let's take a more complex example. This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a 2-layered FC here. The first layer contains 3 neurons, the second layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FC to be $FC_{1}$ and the second FC to be $FC_{2}$. The inputs for $FC_{1}$ are $x1$ and $x2$.
+
+![](./images/diff-twolayerfc.png)
 
 The other input signals to the FC are the gradients of the weights and biases to each neuron. $FC_{1}$ contains 3 neurons and the functionality is the same as the example of the single neuron. From each neuron, we expect the following -- since this is NOT the final layer, we do not need to calculate the loss yet. As a result, here is what we expect from each neuron:
 
