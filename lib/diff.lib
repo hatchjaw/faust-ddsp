@@ -800,27 +800,21 @@ env(vars) = environment {
 //==========================================================================
 
 activations = environment {
-    sigmoid(in) = d.diff(1),(d.diff(0),v.var(1) : d.diff(-) : d.diff(exp),d.diff(1) : d.diff(+)) : d.diff(/)
-        with {
-            v = vars((in));
-            d = env(v);
-        }; 
+    sigmoid(d) = d.diff(0),d.diff(_) : d.diff(-) : d.diff(1),d.diff(exp),d.diff(1) : d.diff(_),d.diff(+) : d.diff(/);
 };
 
 //===========================Loss Functions=================================
 //
 //==========================================================================
 losses = environment {
-    L1 = lossFn
+    L1(windowSize, y, N) = lossFn(windowSize, y, _, N)
     with {
-        lossFn(windowSize, y, yHat) = yHat - y
-                                    : window
-                                    : v.var(1) : d.diff(abs)
-            with {
-                window = ba.slidingMean(windowSize);
-                v = vars((yHat));
-                d = env(v);
-            };
+        lossFn(windowSize, y, yHat, N) = yHat - y, par(i, 2*N+1, _)
+                                    : window(windowSize, N)
+                                    : d.diff(abs);
+        window(size, N) = par(i, 2*N+2, ba.slidingMean(size));
+        v = vars((par(i, 2*N+1, _)));
+        d = env(v);
     };
 };
 
@@ -831,72 +825,84 @@ losses = environment {
 weights(n, learningRate) = par(i, n, _ : *(learningRate) : -~_ <: attach(hbargraph("weight%i", -1, 1)));
 bias(learningRate) = _ : *(learningRate) : -~_ <: attach(hbargraph("bias", -1, 1));
 
-// Input : in (X) (need to create w, b)
-// Output: L, dL/dw1, dL/dw2 ... dL/dwN, dL/db, dL/dX, Z
-neuronLast(N, activation, lossFn, label, learningRate) = update_params : mul : act : loss(label) : grad_route
+// Input : w, b, x
+// Output: L, dL/dw1, dL/dw2 ... dL/dwN, dL/db, dL/dX1, dL/dX2 ... dL/dXN
+neuronLast(N, activation, lossFn, label, learningRate) = cross : update_params : act_loss : grad_route(N)
     with {
-        v = vars((si.bus(N)));
-        d = env(v);
+        cross = ro.cross(2*N+1) : ro.cross(N), _, ro.cross(N)
+            : par(i, N, _), route(N+1, N+1, par(i, N, (i+2, i+1)), (1,N+1));
+            
         update_params = par(i, N, _), weights(N, learningRate), bias(learningRate);
 
         routing = route(2*N+1, 2*N+1,
             par(i, N, (i+1,2*i+1), (i+1+N,2*i+2)), (2*N+1,2*N+1));
 
-        mul = routing : (par(i, N, v.var(i+1),v.var(i+1+N) : d.diff(*)) : d.sumall(N)),v.var(2*N+1) : d.diff(+)
-            : route(2*N+2, 2*N+3, par(i, 2*N+2, (i+1, i+2)), (1, 1))
+        act_loss = routing : (par(i, N, v.var(i+1),v.var(i+1+N) : d.diff(*)) : d.sumall(N)),v.var(2*N+1) : d.diff(+)
+            : act : loss(label)
             with {
                 v = vars((par(i, 2*N+1, _)));
                 d = env(v);
+                act = activation(d); 
+                loss(y) = (lossFn(d, 1<<3, y, _, N) : (_ <: attach(hbargraph("loss", -1, 1))), par(i, 2*N+1, _));
             };
-        
-        act = _, (activation : _, _), par(i, 2*N+1, _); 
-
-        loss(y) = _, (lossFn(1<<3, y, _) : (_ <: attach(hbargraph("loss", -1, 1))), _), par(i, 2*N+2, _);  
 
         // produce all necessary gradients for backprop: 
-        // in: <L, dL/dy, dy/dz, dz/dx1, dz/dx2 ... dz/dxN, dz/dw1, dz/dw2 ... dz/dwN, dz/db>
-        // output: <L, dL/dx1, dL/dx2 ... dL/dxN, dL/db, dL/dw1, dL/dw2 ... dL/dwN> ; dL/dx is used for next neuron's prop
-        grad_route = _, _, *, par(i, 2*N+1, _)
-                : _, _, route(2*N+2, 4*N+2, par(i, 2*N+1, (1, 2*i+1), (i+2, 2*i+2)))
-                : _, _, par(i, 2*N+1, *)
-                : _, _, par(i, N, _), route(N+1, N+1, (N+1,1), par(i, N, (i+1, i+2)));
+        // in: <L, dL/dx1, dL/dx2... dL/dxN, dL/dw1, dL/dw2... dL/dwN, dL/db>
+        // out: <L, dL/dw1, dL/dw2... dL/dwN, dL/db, dL/dx1, dL/dx2... dL/dxN>
+        grad_route(N) = _, ro.cross(2*N), _ : _, ro.cross(N), ro.cross(N), _
+                    : _, par(i, N, _), route(N+1, N+1, (N+1, 1), par(i, N, (i+1,i+2)));
     }; 
 
 // In: Number of neurons (N), number of inputs (n)
 // In: X, Y (1 signal)
 // You need to leave n+1 signals free for the gradients.
-fcLast(N, n, activationFn, lossFn, Y, learningRate) = route(n, (2*n+1)*N, par(i, n, par(j, N, (i+1,(2*n+1)*j+i+1))))
-                                    : par(i, N, neuronLast(n, activationFn, lossFn, Y, learningRate));
+fcLast(N, n, activationFn, lossFn, Y, learningRate) = (route(N*(n+1)+n, N*(2*n+1), 
+                                    par(i, (n+1)*N, (i+1,i+1+n*int(i / (n+1)))),
+                                    par(i, N, par(j, n, (j+1+(n+1)*N, (j+1+(i+1)*(n+1)+i*(n))))))
+                                    : par(i, N, (neuron(n, activationFn, learningRate))));
+                                    // ~ par(i, N, si.block(1), si.bus(n+1), si.block(n))
+                                    // : par(i, N, si.block(n+2), si.bus(n));
 
 
-// Regular neuron (except you have an recursive input from dL/dX)
-neuron(N, activation, learningRate) = update_params : mul : act : grad_route
-    with {        
+// Input : w, b, x
+// Output: L, dL/dw1, dL/dw2 ... dL/dwN, dL/db, dL/dX1, dL/dX2 ... dL/dXN
+neuron(N, activation, learningRate) = cross : update_params : act : grad_route(N)
+    with {
+        cross = ro.cross(2*N+1) : ro.cross(N), _, ro.cross(N)
+            : par(i, N, _), route(N+1, N+1, par(i, N, (i+2, i+1)), (1,N+1));
+            
         update_params = par(i, N, _), weights(N, learningRate), bias(learningRate);
 
         routing = route(2*N+1, 2*N+1,
             par(i, N, (i+1,2*i+1), (i+1+N,2*i+2)), (2*N+1,2*N+1));
 
-        mul = routing : (par(i, N, v.var(i+1),v.var(i+1+N) : d.diff(*)) : d.sumall(N)),v.var(2*N+1) : d.diff(+)
+        act = routing : (par(i, N, v.var(i+1),v.var(i+1+N) : d.diff(*)) : d.sumall(N)),v.var(2*N+1) : d.diff(+)
+            : acti
             with {
                 v = vars((par(i, 2*N+1, _)));
                 d = env(v);
+                acti = activation(d); 
             };
-        
-        act = (activation : _, _), par(i, 2*N+1, _); 
 
         // produce all necessary gradients for backprop: 
-        // in: <y, dy/dz, dz/dx1, dz/dx2 ... dz/dxN, dz/dw1, dz/dw2 ... dz/dwN, dz/db>
-        // output: <y, dy/dz, dz/dx1 ... dz/dxN, dz/db, dz/dw1, dz/dw2 ... dz/dwN> 
-        grad_route = _, _, par(i, N, _), route(N+1, N+1, (N+1,1), par(i, N, (i+1, i+2)));
+        // in: <L, dL/dx1, dL/dx2... dL/dxN, dL/dw1, dL/dw2... dL/dwN, dL/db>
+        // out: <L, dL/dw1, dL/dw2... dL/dwN, dL/db, dL/dx1, dL/dx2... dL/dxN>
+        grad_route(N) = _, ro.cross(2*N), _ : _, ro.cross(N), ro.cross(N), _
+                    : _, par(i, N, _), route(N+1, N+1, (N+1, 1), par(i, N, (i+1,i+2)));
     }; 
 
 // In: Number of neurons (N), number of inputs (n)
 // In: X, Y (1 signal)
-fc(N, n, activationFn, learningRate) = route(n, (2*n+1)*N, par(i, n, par(j, N, (i+1,(2*n+1)*j+i+1))))
-                                    : par(i, N, neuron(n, activationFn, learningRate))
-                                    : route((2*n+3)*N, (2*n+3)*N, 
-                                    // set all y's first
-                                    par(i, N, (i*(2*n+3)+1, i+1)),
-                                    par(i, N, par(j, 2*n+2, (i*(2*n+3)+j+2, N+i*(2*n+2)+j+1))));
+fc(N, n, activationFn, learningRate) = route(N*(n+1)+n, N*(2*n+1), 
+                                    par(i, (n+1)*N, (i+1,i+1+n*int(i / (n+1)))),
+                                    par(i, N, par(j, n, (j+1+(n+1)*N, (j+1+(i+1)*(n+1)+i*(n))))))
+                                    : par(i, N, (neuron(n, activationFn, learningRate)))
+                                    : route((2*n+2)*N, (2*n+2)*N, par(i, N, (i*(2*n+2)+1, i+1)),
+                                    par(i, N, par(j, 2*n+1, (i*(2*n+2)+j+2, N+i*(2*n+1)+j+1))));
 
+// In: number of neurons (N), number of inputs (n)
+// This function is only for fc layers that ARE NOT the last layer.
+backpropFC(N, n, x) = par(i, N+2, _), par(i, (2*n+N)*x, _), (route(N+2*n+1, N+2*n+1, (1,1), par(i, N-1, (i+2, 2*n+1+i+2)), 
+                    par(i, 2*n+1, (i+N+1, i+2)))
+                    : (route(2*n+2, 4*n+2, par(i, 2*n+1, (1, 2*i+1), (i+2, 2*i+2))): par(i, 2*n+1, *)), par(i, N-1, _)), 
+                    par(i, (2*n+1)*(N-1), _);
