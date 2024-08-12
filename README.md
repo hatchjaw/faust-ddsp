@@ -1460,6 +1460,138 @@ This is pretty complex. Imagine the complexity for more deeper layers! You would
 
 NB. Faust's system of running epoches is very quick (it reaches 20000 epoches in about 10 seconds) and hence the chance of overfitting is very high in this example. 
 
+## Faust Neural Blocks
+In Faust, we define neural blocks to contain various types of layers in ML. We, of course, use the basic concept of a neuron and attempt to create more generalized blocks (such as fully connected layers) that operate on the core concept of how backpropagation would exist in a language such as Faust.
+
+A major issue one can notice is that reverse-mode autodiff is something that does not tend to exist in Faust. We would need to conduct backpropagation in the forward loop only. In this section, we will demonstrate how exactly these layers exist in Faust.
+
+### Fully Connected Block
+Let's begin with the math involved with the forward-pass and the backward-pass in a fully connected layer. Let's first begin with a simple example of a single neuron in the FC block.
+
+This example involves 5 signals passing through the neuron (2 weights, 1 bias, 2 inputs). We will denote weights as $w$, biases as $b$ and inputs as $x$.
+
+In this example, let us assume the incoming signals to be $w1, w2, b, x1, x2$. The neuron appropriately routes these parameters for backpropagation. As stated earlier, backpropagation would just include the following:
+```faust
+weights(n, learningRate) = par(i, n, _ : *(learningRate) : -~_ <: attach(hbargraph("weight%i", -1, 1)));
+bias(learningRate) = _ : *(learningRate) : -~_ <: attach(hbargraph("bias", -1, 1));
+```
+
+We actively allow for the calculation of the $a_{1}$ as stated in the previous section, and further calculate $y$ via an appropriate activation function (via autodiff). Since this example exhibits only one FC layer, we would need to calculate the losses based on some given value. As the current moment, the loss functions are implemented strictly for the purpose of classification with respect to a particular value. This can be extended to regression to a particular extent, which has not been experimented yet.
+
+Using the loss function (and autodiff), we produce the following from the FC layer:
+
+$$
+<L, \frac{\partial L}{\partial w1}, \frac{\partial L}{\partial w2}, \frac{\partial L}{\partial b}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}>
+$$
+
+Mathematically speaking, we can expect $2N+2$ signals as a output from an FC, assuming $N$ inputs. Since this example is pretty simple, we can simply backpropagate the gradients of $w1, w2, b$ with respect to L to the FC.
+
+Let's take a more complex example. This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a 2-layered FC here. The first layer contains 3 neurons, the second layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FC to be $FC_{1}$ and the second FC to be $FC_{2}$. The inputs for $FC_{1}$ are $x1$ and $x2$.
+
+The other input signals to the FC are the gradients of the weights and biases to each neuron. $FC_{1}$ contains 3 neurons and the functionality is the same as the example of the single neuron. From each neuron, we expect the following -- since this is NOT the final layer, we do not need to calculate the loss yet. As a result, here is what we expect from each neuron:
+
+$$
+<y, \frac{\partial y}{\partial w1}, \frac{\partial y}{\partial w2}, \frac{\partial y}{\partial b}, \frac{\partial y}{\partial x1}, \frac{\partial y}{\partial x2}>
+$$
+
+What are we missing here to make these gradients appropriate for backpropagation? We're missing $\frac{\partial L}{\partial y}$ for each neuron. Since each neuron outputs a $y$, we need a partial derivative of L with respect to y in order to obtain true gradients for backpropagation. How?
+
+Let's move on to the second FC $FC_{2}$. The outputs of $FC_{1}$ i.e. $y1, y2, y3$ are now the inputs to this connected layer. What now? The same operation occurs and we attempt to produce the gradients (via end-to-end autodiff). Assume the inputs to this $FC_{2}$ to be now $x1^{'}, x2^{'}, x3^{'}$ instead of $y1, y2, y3$. This $FC_{2}$ finally produces the following:
+
+$$
+<L, \frac{\partial L}{\partial w1^{'}}, \frac{\partial L}{\partial w2^{'}}, \frac{\partial L}{\partial w3^{'}}, \frac{\partial L}{\partial b^{'}}, \frac{\partial L}{\partial x1^{'}}, \frac{\partial L}{\partial x2^{'}}, \frac{\partial L}{\partial x3^{'}}> 
+$$
+
+As a result, we use the following for backpropagation for the second FC ($FC_{2}$).
+
+$$
+<\frac{\partial L}{\partial w1^{'}}, \frac{\partial L}{\partial w2^{'}}, \frac{\partial L}{\partial w3^{'}}, \frac{\partial L}{\partial b^{'}}>
+$$
+
+Now, we need to appropriately modify the gradients outputted from each neuron by $FC_{1}$. We do so by the simple chain rule. Although not end-to-end differentiable, this is a tiny limitation of the backpropagation algorithm. Regardless, we ensure that the gradients produced are true and usable for realistic scenarios. How does chain rule work though here?
+
+We have $<\frac{\partial L}{\partial x1^{'}}, \frac{\partial L}{\partial x2^{'}}, \frac{\partial L}{\partial x3^{'}}>$ in hand. These are essentially $<\frac{\partial L}{\partial y1}, \frac{\partial L}{\partial y2}, \frac{\partial L}{\partial y3}>$. 
+
+We also know the outputs of $FC_{1}$ are the following:
+
+$$
+<y1, y2, y3, \frac{\partial y1}{\partial w1}, \frac{\partial y1}{\partial w2}, \frac{\partial y1}{\partial b1}, \frac{\partial y1}{\partial x1}, \frac{\partial y1}{\partial x2}, \frac{\partial y2}{\partial w3}, \frac{\partial y2}{\partial w4}, \frac{\partial y2}{\partial b2}, \frac{\partial y2}{\partial x1}, \frac{\partial y2}{\partial x2}, \frac{\partial y3}{\partial w5}, \frac{\partial y3}{\partial w6}, \frac{\partial y3}{\partial b3}, \frac{\partial y3}{\partial x1}, \frac{\partial y3}{\partial x2}>
+$$
+
+We now use the chain rule to produce the following gradients:
+
+$$
+<\frac{\partial L}{\partial w1}, \frac{\partial L}{\partial w2}, \frac{\partial L}{\partial b1}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}, \frac{\partial L}{\partial w3}, \frac{\partial L}{\partial w4}, \frac{\partial L}{\partial b2}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}, \frac{\partial L}{\partial w5}, \frac{\partial L}{\partial w6}, \frac{\partial L}{\partial b3}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}>
+$$
+
+As a result, we've achieved the gradients for the weights and biases for each neuron in $FC_{1}$. This system proves that backpropagation by itself is a complex algorithm that needs to be finetuned for previous layers. Regardless, for another previous layer, we have the following gradients left:
+
+$$
+<\frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}>
+$$
+
+These are just duplicates from each neuron. Traditionally, machine learning engineers tend to aggregate these gradients by just averaging them out -- however, there are multiple methods of aggregation; we will stick to averaging for now. As a result, we provide these gradients (in this case, 3 gradients) for previous layer's backprop.
+
+### Coding a FC
+This library is specifically developed for the sake of generalization. As a result, we define the following functions:
+
+#### Creation of an FC
+```faust
+df.fc(N, n, activationFn, learning_rate)
+```
+
+Here, $N$ = number of neurons in the FC; $n$ = number of inputs to the FC.
+
+### Backpropagation (Chain Rule) for each FC (except the last layer)
+```faust
+df.chainApply(N, n, 0) : df.chainApply(N-1, n, 1) ... df.chainApply(1, n, N-1)
+```
+
+We plan to improve the usage of this. Here, $N$ refers to the number of neurons in that FC, $n$ refers to the number of inputs in that FC.
+
+NB. The last layer's backpropagation must be done manually; there is no chain rule required.
+
+#### Gradient Averaging 
+```faust
+df.gradAveraging(N, n)
+```
+
+Here, $N$ refers to the number of neurons in that FC, $n$ refers to the number of inputs in that FC. chainApply and gradAveraging should go together.
+
+#### Activation Functions and Loss Functions
+Unlike defined earlier, we need to use special activation functions and loss functions which you may call using the following:
+
+```faust
+df.activations.sigmoid
+...
+
+df.losses.L1(windowSize, y, N)
+```
+
+Here, $y$ refers to the label that are looking for; $N$ refers to the number of inputs to the **LAST** FC layer.
+
+#### Creating a full-scale neural network
+```faust
+process = si.bus(N_input) : (df.fc(N1_neurons, N_input, df.activations.sigmoid, 0.1)
+        // ... you may add more layers as you need
+        : ((df.fc(N2_neurons, N1_neurons, df.activations.sigmoid, 0.1) : df.losses.L1(1<<3, Y_label, N1_neurons)), 
+        par(i, (2*N_input + 1) * N1_neurons, _))
+        ~ (si.block(1), si.bus(N1_neurons+1)) : si.block(N1_neurons+2), par(i, (2*N_input + 2) * N1_neurons, _)
+        : df.gradAveraging(N2_neurons, N1_neurons), par(i, (2*N_input + 1) * N1_neurons, _)
+        : df.chainApply(N1_neurons, N_input, 0) : df.chainApply(N1_neurons - 1, 2, 1) : ... : df.chainApply(1, 2, N1_neurons - 1))
+        ~ par(i, N1_neurons, si.bus(N1_neurons), si.block(N_input)) : par(i, N1_neurons, si.block(N1_neurons), si.bus(N_input))
+        : df.gradAveraging(N1_neurons, N_input);
+        // ... you may add more backprop layers with the recursive part as well
+```
+
+This segment of code is extremely generalized and you may add more layers / more backpropagation elements as needed. The recursion is needed for every FC layer.
+
+#### Final tips for creation of a neural network
+- You must know that the output of a neuron is essentially $<y, \frac{\partial y}{\partial w1}, ..., \frac{\partial y}{\partial wN}, \frac{\partial y}{\partial b}, \frac{\partial y}{\partial x1}, ..., \frac{\partial y}{\partial xN}>$. This will help you truly understand the algorithm appropriately.
+- You must know that the output of a FC (**not last**) is essentially $<y1, \frac{\partial y1}{\partial w1}, ..., \frac{\partial y1}{\partial wN}, \frac{\partial y1}{\partial b}, \frac{\partial y1}{\partial x1}, ..., \frac{\partial y1}{\partial xN}, y2, \frac{\partial y2}{\partial w1}, ..., \frac{\partial y2}{\partial wN}, \frac{\partial y2}{\partial b}, \frac{\partial y2}{\partial x1}, ..., \frac{\partial y2}{\partial xN}, ....>$. This will help you truly understand the algorithm appropriately.
+- Note that the chain rule blocks will produce the gradients of each neuron's weights appropriately. You must simply recurse them back to the appropriate FC.
+- The gradient averaging must be used alongside the chainApply before the recursion of gradients. Note the signals.
+
 ## Roadmap
 - A dataset creation / storage method...
 - A more generalized method for calculating gradients for weights in neurons...
