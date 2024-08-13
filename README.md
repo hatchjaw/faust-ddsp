@@ -1573,7 +1573,7 @@ process = si.bus(N_input) : (df.fc(N1_neurons, N_input, df.activations.sigmoid, 
         ~ (si.block(1), si.bus(N1_neurons+1)) : si.block(N1_neurons+2), par(i, (2*N_input + 2) * N1_neurons, _)
         : df.gradAveraging(N2_neurons, N1_neurons), par(i, (2*N_input + 1) * N1_neurons, _)
         : df.chainApply(N1_neurons, N_input, 0) : df.chainApply(N1_neurons - 1, 2, 1) : ... : df.chainApply(1, 2, N1_neurons - 1))
-        ~ par(i, N1_neurons, si.bus(N1_neurons), si.block(N_input)) : par(i, N1_neurons, si.block(N1_neurons), si.bus(N_input))
+        ~ par(i, N1_neurons, si.bus(2*N_input+1), si.block(N_input)) : par(i, N1_neurons, si.block(2*N_input+1), si.bus(N_input))
         : df.gradAveraging(N1_neurons, N_input);
         // ... you may add more backprop layers with the recursive part as well
 ```
