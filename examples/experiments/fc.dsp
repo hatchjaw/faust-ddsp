@@ -1,7 +1,6 @@
 df = library("diff.lib");
 import("stdfaust.lib");
 
-
 process = si.bus(2) : (df.fc(3, 2, df.activations.sigmoid, 0.1)
         : ((df.fc(1, 3, df.activations.sigmoid, 0.1) : df.losses.L1(1<<3, 1, 3)), par(i, 15, _))
         ~ (si.block(1), si.bus(4)) : si.block(5), par(i, 18, _)

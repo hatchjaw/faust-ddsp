@@ -41,7 +41,6 @@ DDSP experiments in Faust.
     - [Differentiable `sum` iteration](#differentiable-sum-iteration)
     - [ML Circuits](#ml-circuits)
       - [Backpropagation circuit](#backpropagation-circuit)
-      - [Backpropagation circuit (for when you lack inputs)](#backpropagation-circuit-for-when-you-lack-inputs)
       - [Loss Functions](#loss-functions)
         - [MAE Function (Time-Domain)](#l1-time-domain-mae)
         - [MSE Function (Time-Domain)](#l2-time-domain-mse)
@@ -1216,19 +1215,6 @@ df = library("diff.lib");
 process = df.backprop(groundTruth, learnable, lossFunction);
 ```
 
-##### Backpropagation circuit (for when you lack inputs)
-```faust
-backpropNoInput(groundTruth, learnable, lossFunction)
-```
-
-NB. this is defined _outside_ of the autodiff environment, e.g.:
-
-```faust
-df = library("diff.lib");
-...
-process = df.backpropNoInput(groundTruth, learnable, lossFunction);
-```
-
 ##### Loss Functions
 
 This loss function requires a windowSize that allows Faust to record the (ba.)slidingMean of the last `windowSize` inputs to the loss function. This allows the input to be averaged over a small period of time and avoid random spikes of inputs or inconsistencies in signals. This loss function also calculates the loss as well the gradients to guide the `learnable` parameter to the required `truth` parameter.
@@ -1249,7 +1235,9 @@ Mathematically, this loss function is defined as:
 $$
 L = |y - \hat{y}|
 $$
-while, gradients are defined in autodiff as:
+
+while gradients are defined in autodiff as:
+
 $$
 G = \frac{y - \hat{y}}{|y - \hat{y}|} \cdot \frac{\partial y}{\partial x}
 $$
@@ -1330,7 +1318,7 @@ $$
 where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter; a suggested $\delta$ is 1.0.
 
 ###### Linear frequency-domain
-NB. This loss function converges to the global minima for the range $[140, 1350]$. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minimas. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue. We report that RMSProp seems to break out of the minima at some threshold and it seems to train well until another minima. As a result, we suspect that the loss landscape is a series of plateaus and hence, a suitable learning rate scheduler (such as, an oscillating learning rate) and a good optimizer is required to solve this problem.
+NB. This loss function converges to the global minimum for the range $[140, 1350]$ Hz. This was tested with a square and oscillatory waveform. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minimas. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue. We report that RMSProp seems to break out of the minima at some threshold and it seems to train well until another minima. As a result, we suspect that the loss landscape is a series of plateaus and hence, a suitable learning rate scheduler (such as, an oscillating learning rate) and a good optimizer is required to solve this problem.
 
 ```faust
 learnLinearFreq(windowSize, optimizer)
@@ -1345,8 +1333,6 @@ This scheduler decays the learnable rate by $exp(delta)$ every $epoch$ iteration
 ```faust
 learning_rate : learning_rate_scheduler(epoch, delta)
 ```
-
-NB. We plan to implement other schedulers such as cosine decay and more.
 
 ##### Optimizers
 Optimizers are algorithms or methods used in ML to adjust the learning rate / gradients of a model in order to minimize the loss function. 
@@ -1400,12 +1386,12 @@ df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizeSGD(1e-3)))
 [^7]: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
 
 ## Neural Networks
-The core concept of NNs is a neuron. We introduce the concept of a neuron in this library. Backpropagation is a difficult in a functional language, such as Faust. 
+The core concept of NNs is a neuron. We introduce the concept of a neuron in this library.
 
-Since much of what we have covered deals with parameter estimation, we know that gradient descent is especially effective to do this task in DSP. The issue is the creation of a fully functioning ML model that can create accurate weights and biases to deal with tasks such as classification, regression and more. This can also be extended to more complex models such as the creation of generative models, such as autoencoders. 
+We can see that the task of parameter estimation creates an instance of overfitting to a particular value. As a result, there is a need to create a more generalized model that can accurately predict / classify things in the audio-domain. The issue is the creation of a fully functioning ML model that can create accurate weights and biases to deal with tasks such as classification, regression and more. This can also be extended to more complex models such as the creation of generative models, such as autoencoders. 
 
 ### A functioning neuron
-We introduce the concept of a single functioning neuron in example [.\examples\experiments\single_neuron.dsp](./examples/experiments/single_neuron.dsp). This allows us to take a single hidden layer between the input and the output. This example serves to an classification example to illustrate how Faust deals with non-linearities and how quickly epoches occur in Faust.
+We introduce the concept of a single functioning neuron in example [single_neuron.dsp](./examples/experiments/single_neuron.dsp). This allows us to take a single hidden layer between the input and the output. This example serves to an classification example to illustrate how Faust can create non-linear neural structures. Due to the dynamic nature of Faust, epoches tend to occur on a much faster scale in comparison to traditional ML algorithms. In this context, an epoch can be defined as one complete pass of the training sample through the algorithm. The speed of the epoches can be accounted for based on the sampling rate -- however, we expect that as the neural network grows more complex, the complexity of the calculations will cause Faust to slow down / reduce the rapid speed of epoches.
 
 As we know, the structure of a single neuron looks something like so: 
 
@@ -1438,7 +1424,7 @@ $$
 G_{i} = \frac{\partial L}{\partial w_{i}}
 $$
 
-This needs to further simplified for our usage via chain rule:
+This needs to be further simplified for our usage via chain rule:
 
 $$
 G_{i} = \frac{\partial L}{\partial w_{i}} = \frac{\partial L}{\partial y} \cdot \frac{\partial y}{\partial a_{1}} \cdot \frac{\partial a_{1}}{\partial w_{i}} \\
@@ -1460,39 +1446,43 @@ This is pretty complex. Imagine the complexity for more deeper layers! You would
 
 NB. Faust's system of running epoches is very quick (it reaches 20000 epoches in about 10 seconds) and hence the chance of overfitting is very high in this example. 
 
-## Faust Neural Blocks
-In Faust, we define neural blocks to contain various types of layers in ML. We, of course, use the basic concept of a neuron and attempt to create more generalized blocks (such as fully connected layers) that operate on the core concept of how backpropagation would exist in a language such as Faust.
+NB2. This example is more indicative of a symbolic differentiation approach; but we will continue to talk about automatic differentiation throughout the next section.
+
+## Faust Neural Network Blocks
+In Faust, we define neural network blocks to contain various types of layers in ML. We, of course, use the basic concept of a neuron and attempt to create more generalized blocks (such as fully connected layers) that operate on the core concept of how backpropagation would exist in a language such as Faust.
 
 A major issue one can notice is that reverse-mode autodiff is something that does not tend to exist in Faust. We would need to conduct backpropagation in the forward loop only. In this section, we will demonstrate how exactly these layers exist in Faust.
 
-### Fully Connected Block
-Let's begin with the math involved with the forward-pass and the backward-pass in a fully connected layer. Let's first begin with a simple example of a single neuron in the FC block.
+### Fully Connected (FC) Block
+Let's begin with the math involved with the forward-pass and the backward-pass in a fully connected layer (FCL). Let's first begin with a simple example of an output FC, consisting of one neuron only.
 
 ![](./images/diff-singlefc.png)
 
-This example involves 5 signals passing through the neuron (2 weights, 1 bias, 2 inputs). We will denote weights as $w$, biases as $b$ and inputs as $x$.
+This example involves 7 signals passing through the neuron (3 weights, 1 bias, 3 inputs). We will denote weights as $w$, biases as $b$ and inputs as $x$.
 
-In this example, let us assume the incoming signals to be $w1, w2, b, x1, x2$. The neuron appropriately routes these parameters for backpropagation. As stated earlier, backpropagation would just include the following:
+In this example, let us assume the incoming signals to be $w1, w2, w3, b, x1, x2, x3$. The neuron appropriately routes these parameters for backpropagation. As stated earlier, backpropagation would just include the following:
 ```faust
 weights(n, learningRate) = par(i, n, _ : *(learningRate) : -~_ <: attach(hbargraph("weight%i", -1, 1)));
 bias(learningRate) = _ : *(learningRate) : -~_ <: attach(hbargraph("bias", -1, 1));
 ```
 
-We actively allow for the calculation of the $a_{1}$ as stated in the previous section, and further calculate $y$ via an appropriate activation function (via autodiff). Since this example exhibits only one FC layer, we would need to calculate the losses based on some given value. As the current moment, the loss functions are implemented strictly for the purpose of classification with respect to a particular value. This can be extended to regression to a particular extent, which has not been experimented yet.
+We actively allow for the calculation of the $a_{1}$ as stated in the previous section, and further calculate $y$ via an appropriate activation function (via autodiff). Since this example exhibits only one FCL, we would need to calculate the losses based on some given value. As the current moment, the loss functions are implemented strictly for the purpose of classification with respect to a particular value. This can be extended to regression to a particular extent, which has not been experimented yet. 
 
-Using the loss function (and autodiff), we produce the following from the FC layer:
+Since we deal with an output FCL only, we would need to calculate the losses which is done via the L1 loss function. The loss function continues autodiff and hence, produces a list of derivatives of L with respect to the parameters stated above. We will cover the implementation of these loss functions in the next section.
+
+Using the loss function (and autodiff), we produce the following from the FCL:
 
 $$
-<L, \frac{\partial L}{\partial w1}, \frac{\partial L}{\partial w2}, \frac{\partial L}{\partial b}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}>
+<L, \frac{\partial L}{\partial w1}, \frac{\partial L}{\partial w2}, \frac{\partial L}{\partial w3}, \frac{\partial L}{\partial b}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}, \frac{\partial L}{\partial x3}>
 $$
 
-Mathematically speaking, we can expect $2N+2$ signals as a output from an FC, assuming $N$ inputs. Since this example is pretty simple, we can simply backpropagate the gradients of $w1, w2, b$ with respect to L to the FC.
+Mathematically speaking, we can expect $2N+2$ signals as a output from an FCL, assuming $N$ inputs. Since this example is pretty simple, we can simply backpropagate the gradients of $w1, w2, w3, b$ with respect to L to the FCL.
 
-Let's take a more complex example. This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a 2-layered FC here. The first layer contains 3 neurons, the second layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FC to be $FC_{1}$ and the second FC to be $FC_{2}$. The inputs for $FC_{1}$ are $x1$ and $x2$.
+Let's take a more complex example. This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a 2-layered FCL here. The first layer contains 3 neurons, the second layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FCL to be $FC_{1}$ and the second FCL to be $FC_{2}$. The inputs for $FC_{1}$ are $x1$ and $x2$.
 
 ![](./images/diff-twolayerfc.png)
 
-The other input signals to the FC are the gradients of the weights and biases to each neuron. $FC_{1}$ contains 3 neurons and the functionality is the same as the example of the single neuron. From each neuron, we expect the following -- since this is NOT the final layer, we do not need to calculate the loss yet. As a result, here is what we expect from each neuron:
+The other input signals to the FCL are the gradients of the weights and biases to each neuron. $FC_{1}$ contains 3 neurons and the functionality is the same as the example of the single neuron. From each neuron, we expect the following -- since this is NOT the final layer, we do not need to calculate the loss yet. As a result, here is what we expect from each neuron:
 
 $$
 <y, \frac{\partial y}{\partial w1}, \frac{\partial y}{\partial w2}, \frac{\partial y}{\partial b}, \frac{\partial y}{\partial x1}, \frac{\partial y}{\partial x2}>
@@ -1500,19 +1490,19 @@ $$
 
 What are we missing here to make these gradients appropriate for backpropagation? We're missing $\frac{\partial L}{\partial y}$ for each neuron. Since each neuron outputs a $y$, we need a partial derivative of L with respect to y in order to obtain true gradients for backpropagation. How?
 
-Let's move on to the second FC $FC_{2}$. The outputs of $FC_{1}$ i.e. $y1, y2, y3$ are now the inputs to this connected layer. What now? The same operation occurs and we attempt to produce the gradients (via end-to-end autodiff). Assume the inputs to this $FC_{2}$ to be now $x1^{'}, x2^{'}, x3^{'}$ instead of $y1, y2, y3$. This $FC_{2}$ finally produces the following:
+Let's move on to the second FCL $FC_{2}$. The outputs of $FC_{1}$ i.e. $y1, y2, y3$ are now the inputs to this connected layer. What now? The same operation occurs and we attempt to produce the gradients (via end-to-end autodiff). Assume the inputs to this $FC_{2}$ to be now $x1^{'}, x2^{'}, x3^{'}$ instead of $y1, y2, y3$. This $FC_{2}$ finally produces the following:
 
 $$
 <L, \frac{\partial L}{\partial w1^{'}}, \frac{\partial L}{\partial w2^{'}}, \frac{\partial L}{\partial w3^{'}}, \frac{\partial L}{\partial b^{'}}, \frac{\partial L}{\partial x1^{'}}, \frac{\partial L}{\partial x2^{'}}, \frac{\partial L}{\partial x3^{'}}> 
 $$
 
-As a result, we use the following for backpropagation for the second FC ($FC_{2}$).
+As a result, we use the following for backpropagation for the second FCL ($FC_{2}$).
 
 $$
 <\frac{\partial L}{\partial w1^{'}}, \frac{\partial L}{\partial w2^{'}}, \frac{\partial L}{\partial w3^{'}}, \frac{\partial L}{\partial b^{'}}>
 $$
 
-Now, we need to appropriately modify the gradients outputted from each neuron by $FC_{1}$. We do so by the simple chain rule. Although not end-to-end differentiable, this is a tiny limitation of the backpropagation algorithm. Regardless, we ensure that the gradients produced are true and usable for realistic scenarios. How does chain rule work though here?
+Now, we need to appropriately modify the gradients outputted from each neuron by $FC_{1}$. We do so by the simple chain rule. Although not end-to-end differentiable, this is a major limitation of the backpropagation algorithm. Regardless, we ensure that the gradients produced are true and usable for realistic scenarios. How does chain rule work though here?
 
 We have $<\frac{\partial L}{\partial x1^{'}}, \frac{\partial L}{\partial x2^{'}}, \frac{\partial L}{\partial x3^{'}}>$ in hand. These are essentially $<\frac{\partial L}{\partial y1}, \frac{\partial L}{\partial y2}, \frac{\partial L}{\partial y3}>$. 
 
@@ -1536,17 +1526,17 @@ $$
 
 These are just duplicates from each neuron. Traditionally, machine learning engineers tend to aggregate these gradients by just averaging them out -- however, there are multiple methods of aggregation; we will stick to averaging for now. As a result, we provide these gradients (in this case, 3 gradients) for previous layer's backprop.
 
-### Coding a FC
+### Coding an FCL
 This library is specifically developed for the sake of generalization. As a result, we define the following functions:
 
-#### Creation of an FC
+#### Creation of an FCL
 ```faust
 df.fc(N, n, activationFn, learning_rate)
 ```
 
 Here, $N$ = number of neurons in the FC; $n$ = number of inputs to the FC.
 
-### Backpropagation (Chain Rule) for each FC (except the last layer)
+### Backpropagation (Chain Rule) for each FCL (except the last layer)
 ```faust
 df.chainApply(N, n, 0) : df.chainApply(N-1, n, 1) ... df.chainApply(1, n, N-1)
 ```
