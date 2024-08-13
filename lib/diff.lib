@@ -38,9 +38,7 @@ with {
 
 // Might not be the right name.
 backprop(groundTruth,learnable,lossFunction) = (
-    route(nvars+nInputs,nvars+nInputs,par(n, nvars, (n+1, n+1+nInputs)), 
-        // Route input signals to groundTruth and learnable.
-        par(n, nInputs, (n+1+nvars, n+1)))
+    route(nvars+nInputs,nvars+nInputs,par(n,nvars,(n+1,n+3)),(nvars+1,1),(nvars+2,2))
         : vgroup("Hidden", groundTruth),vgroup("Learned", learnable)
         : route(2+nvars,4+nvars,
             // Route ground truth output to loss/gradient function and to output.
@@ -58,6 +56,26 @@ backprop(groundTruth,learnable,lossFunction) = (
 with {
     nvars = inputs(learnable),inputs(groundTruth) : -;
     nInputs = inputs(groundTruth),2 : *;
+};
+
+backpropNoInput(groundTruth,learnable,lossFunction) = (
+    route(nvars,nvars,par(n,nvars,(n+1,n+1)))
+        : vgroup("Hidden", groundTruth),vgroup("Learned", learnable)
+        : route(2+nvars,4+nvars,
+            // Route ground truth output to loss/gradient function and to output.
+            (1,1),(1,nvars+3),
+            // Route learnable output to loss/gradient function and to output.
+            (2,2),(2,nvars+4),
+            // Route gradients to loss/gradient function.
+            par(n,nvars,(n+3,n+3))
+        )
+        : vgroup("[1]Loss/gradient", lossFunction,_,_)
+        // Feed the gradients back.
+        ) ~ (!,si.bus(nvars))
+        // Block the gradients, post-recursion.
+    : _,si.block(nvars),_,_
+with {
+    nvars = inputs(learnable);
 };
 
 //========================Differentiable environment============================
@@ -793,12 +811,12 @@ losses = environment {
     with {
         lossFn(windowSize, y, yHat, N) = yHat - y, par(i, 2*N+1, _)
                                     : window(windowSize, N)
-                                    : d.diff(abs);
+                                    : d.diff(abs)
         with {
             window(size, N) = par(i, 2*N+2, ba.slidingMean(size));
-                    v = vars((par(i, 2*N+1, _)));
-                    d = env(v);
-        }
+            v = vars((par(i, 2*N+1, _)));
+            d = env(v);
+        };
     };
 };
 
@@ -811,7 +829,7 @@ bias(learningRate) = _ : *(learningRate) : -~_ <: attach(hbargraph("bias", -1, 1
 
 // Input : w, b, x
 // Output: L, dL/dw1, dL/dw2 ... dL/dwN, dL/db, dL/dX1, dL/dX2 ... dL/dXN
-neuron(N, activation, learningRate) = cross : update_params : autodiff_compute : grad_route(N)
+neuron(N, activation, learningRate) = cross : update_params : act : grad_route(N)
     with {
         cross = ro.cross(2*N+1) : ro.cross(N), _, ro.cross(N)
             : par(i, N, _), route(N+1, N+1, par(i, N, (i+2, i+1)), (1,N+1));
@@ -821,7 +839,7 @@ neuron(N, activation, learningRate) = cross : update_params : autodiff_compute :
         routing = route(2*N+1, 2*N+1,
             par(i, N, (i+1,2*i+1), (i+1+N,2*i+2)), (2*N+1,2*N+1));
 
-        autodiff_compute = routing : (par(i, N, v.var(i+1),v.var(i+1+N) : d.diff(*)) : d.sumall(N)),v.var(2*N+1) : d.diff(+)
+        act = routing : (par(i, N, v.var(i+1),v.var(i+1+N) : d.diff(*)) : d.sumall(N)),v.var(2*N+1) : d.diff(+)
             : acti
             with {
                 v = vars((par(i, 2*N+1, _)));
