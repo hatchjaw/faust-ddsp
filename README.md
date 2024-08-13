@@ -1279,7 +1279,9 @@ Mathematically, this loss function is defined as:
 $$
 L = (\log(y + 1) - \log(\hat{y} + 1))^2
 $$
+
 while, gradients are defined in autodiff as:
+
 $$
 G = 2 \cdot \frac{\log(y + 1) - \log(\hat{y} + 1)}{y + 1} \cdot \frac{\partial y}{\partial x}
 $$
@@ -1318,7 +1320,7 @@ $$
 where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter; a suggested $\delta$ is 1.0.
 
 ###### Linear frequency-domain
-NB. This loss function converges to the global minimum for the range $[140, 1350]$ Hz. This was tested with a square and oscillatory waveform. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minimas. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue. We report that RMSProp seems to break out of the minima at some threshold and it seems to train well until another minima. As a result, we suspect that the loss landscape is a series of plateaus and hence, a suitable learning rate scheduler (such as, an oscillating learning rate) and a good optimizer is required to solve this problem.
+NB. This loss function converges to the global minimum for the range $[140, 1350]$ Hz. This was tested with a square and oscillatory waveform. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minima. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue. We report that RMSProp seems to break out of the minimum at some threshold and it seems to train well until another minimum. As a result, we suspect that the loss landscape is a series of plateaus and hence, a suitable learning rate scheduler (such as, an oscillating learning rate) and a good optimizer is required to solve this problem.
 
 ```faust
 learnLinearFreq(windowSize, optimizer)
@@ -1391,7 +1393,7 @@ The core concept of NNs is a neuron. We introduce the concept of a neuron in thi
 We can see that the task of parameter estimation creates an instance of overfitting to a particular value. As a result, there is a need to create a more generalized model that can accurately predict / classify things in the audio-domain. The issue is the creation of a fully functioning ML model that can create accurate weights and biases to deal with tasks such as classification, regression and more. This can also be extended to more complex models such as the creation of generative models, such as autoencoders. 
 
 ### A functioning neuron
-We introduce the concept of a single functioning neuron in example [single_neuron.dsp](./examples/experiments/single_neuron.dsp). This allows us to take a single hidden layer between the input and the output. This example serves to an classification example to illustrate how Faust can create non-linear neural structures. Due to the dynamic nature of Faust, epoches tend to occur on a much faster scale in comparison to traditional ML algorithms. In this context, an epoch can be defined as one complete pass of the training sample through the algorithm. The speed of the epoches can be accounted for based on the sampling rate -- however, we expect that as the neural network grows more complex, the complexity of the calculations will cause Faust to slow down / reduce the rapid speed of epoches.
+We introduce the concept of a single functioning neuron in example [single_neuron.dsp](./examples/experiments/single_neuron.dsp). This allows us to take a single hidden layer between the input and the output. This example serves to an classification example to illustrate how Faust can create non-linear neural structures. 
 
 As we know, the structure of a single neuron looks something like so: 
 
@@ -1461,6 +1463,7 @@ Let's begin with the math involved with the forward-pass and the backward-pass i
 This example involves 7 signals passing through the neuron (3 weights, 1 bias, 3 inputs). We will denote weights as $w$, biases as $b$ and inputs as $x$.
 
 In this example, let us assume the incoming signals to be $w1, w2, w3, b, x1, x2, x3$. The neuron appropriately routes these parameters for backpropagation. As stated earlier, backpropagation would just include the following:
+
 ```faust
 weights(n, learningRate) = par(i, n, _ : *(learningRate) : -~_ <: attach(hbargraph("weight%i", -1, 1)));
 bias(learningRate) = _ : *(learningRate) : -~_ <: attach(hbargraph("bias", -1, 1));
