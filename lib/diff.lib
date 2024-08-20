@@ -863,9 +863,41 @@ fc(N, n, activationFn, learningRate) = route(N*(n+1)+n, N*(2*n+1),
                                     : route((2*n+2)*N, (2*n+2)*N, par(i, N, (i*(2*n+2)+1, i+1)),
                                     par(i, N, par(j, 2*n+1, (i*(2*n+2)+j+2, N+i*(2*n+1)+j+1))));
 
-// In: number of neurons (N), number of inputs (n)
-// This function is only for fc layers that ARE NOT the last layer.
-chainApply(N, n, x) = par(i, (2*n+1)*x, _), (route(N+2*n+1, N+2*n+1, (1,1), par(i, N-1, (i+2, 2*n+1+i+2)), par(i, 2*n+1, (i+N+1, i+2)))
-                    : (route(2*n+2, 4*n+2, par(i, 2*n+1, (1, 2*i+1), (i+2, 2*i+2))): par(i, 2*n+1, *)), par(i, N-1, _)), par(i, (2*n+1)*(N-1), _);
+backpropNN(params) = environment {
+        N = ba.count(params) / 2; // number of fcs
 
-gradAveraging(N, n) = route(N*n, N*n, par(i, n, par(j, N, (2*j+i+1, i*N+j+1)))) : par(i, n, sum(j, N, _)) : par(i, n, _ : /(N));
+        // 0 = N-indexed (from 0 to N-1)
+        next_lines(0) = 0;
+        next_lines(n) = next_lines(n-1) + ((ba.take(2*(N-n+1), params))*2+1)*(ba.take(2*(N-n+1)-1, params));
+
+        // 1 = 1-indexed
+        prev_lines(1) = (ba.take(2, params) + 1)*ba.take(1, params) + 1;
+        prev_lines(n) = prev_lines(n-1) + ((ba.take(2*n, params))+1)*(ba.take(2*n-1, params));
+
+        helper(M) = par(i, prev_lines(M), _), df.backpropFC(ba.take(2*M+2, params), ba.take(2*M+1, params)), par(i, next_lines(N-M-1), _);
+
+        // go from 1 to N-1
+        start(1) = helper(1);
+        start(N) = start(N-1) : helper(N);
+};
+
+// In: Number of inputs (N), number of neurons (n)
+backpropFC(N, n) = route((2*N+1)*n + n, (2*N+1)*n + n, par(i, n, (i+1, i+1+(2*N+1)*i), 
+        par(j, 2*N+1, (n+j+1+(2*N+1)*i, (i*(2*N+2)+1) + j+1))))
+        : par(i, n, autoChainRule) : prepareGrads(N, n) 
+        : par(i, (N+1)*n, _), gradAveraging(N, n)
+        with {
+            autoChainRule = route(2*N+2, 4*N+2, par(i, 2*N+1, (1, 2*i+1), (i+2, 2*i+2))) : autoChain;
+            autoChain = par(i, 2*N+1, (v.var(1), d.input : d.diff(*)) : _, si.block(4*N+2)
+                        with {
+                            v = df.vars((par(j, 4*N+2, _)));
+                            d = df.env(v);
+                        }
+                    );
+
+            prepareGrads(N, n) = route((2*N+1)*n, (2*N+1)*n, par(i, n, 
+                        par(j, N+1, (j+1+i*(2*N+1), (1+N)*i+(j+1))), 
+                        par(k, N, (k+1+N+1+(i)*(2*N+1),(k+1+i*N+((N+1)*n))))));
+            
+            gradAveraging(N, n) = route(N*n, N*n, par(i, N+1, par(j, n, (j+i*N+1, i+1+j*n)))) : par(i, N, sum(j, n, _)) : par(i, N, _ : /(n));
+        };
