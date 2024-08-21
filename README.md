@@ -54,6 +54,20 @@ DDSP experiments in Faust.
         - [RMSProp Optimizer](#rmsprop-optimizer)
   - [Neural Networks](#neural-networks)
     - [A functioning neuron](#a-functioning-neuron)
+  - [Faust Neural Network Blocks](#faust-neural-network-blocks)
+    - [Fully Connected Layer]
+      - [Example: One FC]
+      - [Example: Two+ FCs]
+      - [FCL Algorithm]
+        - [Forward Pass]
+        - [Activation Functions \& Loss]
+        - [Backpropagation]
+          - [Limitations with autodiff]
+          - [Gradient Averaging]
+          - [Example: Backpropagation as an Environment]
+        - [A Generalized Example]
+      - [Tips for setting up an FC]
+
 - [Roadmap](#roadmap)
 
 ## What is DDSP?

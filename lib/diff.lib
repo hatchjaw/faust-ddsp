@@ -798,7 +798,8 @@ env(vars) = environment {
 //===========================Activation Functions===========================
 //
 //==========================================================================
-
+// We define activation functions in an environment in order to introduce an element of autodifferentation to them.
+// This is especially effective when we need to use the activation functions in a neural network. It is convenient for our use.
 activations = environment {
     sigmoid(d) = d.diff(0),d.diff(_) : d.diff(-) : d.diff(1),d.diff(exp),d.diff(1) : d.diff(_),d.diff(+) : d.diff(/);
 };
@@ -806,6 +807,10 @@ activations = environment {
 //===========================Loss Functions=================================
 //
 //==========================================================================
+// Similar to activation functions, we define loss functions in an environment in order to introduce an element of autodifferentation to them.
+// This is especially effective when we need to use the loss functions in a neural network. It is convenient for our use.
+// Note that these loss functions can ONLY be used in the context of a neural network and only the final fully connected layer.
+// This is because the loss functions are defined in terms of the output of the neural network.
 losses = environment {
     L1(windowSize, y, N) = lossFn(windowSize, y, _, N)
     with {
@@ -823,22 +828,30 @@ losses = environment {
 //===========================Neuron time====================================
 //
 //==========================================================================
-// Core weights and biases definitions
+// Core weights and biases definitions -- this is the core of the neural network.
 weights(n, learningRate) = par(i, n, _ : *(learningRate) : -~_ <: attach(hbargraph("weight%i", -1, 1)));
 bias(learningRate) = _ : *(learningRate) : -~_ <: attach(hbargraph("bias", -1, 1));
 
+// Here, we define the neuron. This is the smallest element of a fully connected layer.
+// It takes in the number of inputs, the activation function, and the learning rate.
+// Note that the learning rate must be of the magnitude 1e-5 or less.
 // Input : w, b, x
-// Output: L, dL/dw1, dL/dw2 ... dL/dwN, dL/db, dL/dX1, dL/dX2 ... dL/dXN
+// Subprocesses: Convert inputs to z = w*x + b, apply activation function, calculate gradients
+// Output: y, dy/dw1, dy/dw2... dy/dwN, dy/db, dy/dx1, dy/dx2... dy/dxN
 neuron(N, activation, learningRate) = cross : update_params : act : grad_route(N)
     with {
+        // Appropriately routing the signals
         cross = ro.cross(2*N+1) : ro.cross(N), _, ro.cross(N)
             : par(i, N, _), route(N+1, N+1, par(i, N, (i+2, i+1)), (1,N+1));
-            
+        
+        // Recursively updating the weights and biases
         update_params = par(i, N, _), weights(N, learningRate), bias(learningRate);
 
+        // Routing the signals to the activation function
         routing = route(2*N+1, 2*N+1,
             par(i, N, (i+1,2*i+1), (i+1+N,2*i+2)), (2*N+1,2*N+1));
 
+        // Applying the activation function
         act = routing : (par(i, N, v.var(i+1),v.var(i+1+N) : d.diff(*)) : d.sumall(N)),v.var(2*N+1) : d.diff(+)
             : acti
             with {
@@ -847,47 +860,72 @@ neuron(N, activation, learningRate) = cross : update_params : act : grad_route(N
                 acti = activation(d); 
             };
 
-        // produce all necessary gradients for backprop: 
-        // in: <L, dL/dx1, dL/dx2... dL/dxN, dL/dw1, dL/dw2... dL/dwN, dL/db>
-        // out: <L, dL/dw1, dL/dw2... dL/dwN, dL/db, dL/dx1, dL/dx2... dL/dxN>
+        // Reset the routes -- making the signals ready for the gradient calculation
         grad_route(N) = _, ro.cross(2*N), _ : _, ro.cross(N), ro.cross(N), _
                     : _, par(i, N, _), route(N+1, N+1, (N+1, 1), par(i, N, (i+1,i+2)));
     }; 
 
-// In: Number of neurons (N), number of inputs (n)
-// In: X, Y (1 signal)
-fc(N, n, activationFn, learningRate) = route(N*(n+1)+n, N*(2*n+1), 
+// This is one of the most popular simplified layers of a neural network. It consists of a collection of neurons.
+// It takes in the number of neurons, the number of inputs, the activation function, and the learning rate.
+// Note that the learning rate must be of the magnitude 1e-5 or less.
+// Input : N (number of neurons), n (number of inputs), activation function, learning rate
+// Subprocesses: Routing the signals to the neurons
+// Output: y1, y2, ... yN, dy1/dw1, dy1/dw2... dy1/dwN, dy1/db1, dy2/dw1, dy2/dw2... dy2/dwN, dy2/db2, ... dyN/dw1, dyN/dw2... dyN/dwN, dyN/dbN, dy1/dx1, dy1/dx2... dy1/dxN, dy2/dx1, dy2/dx2... dy2/dxN, dyN/dx1, dyN/dx2... dyN/dxN
+fc(N, n, activationFn, learningRate) = // Route signals appropriately -- allow the inputs and corresponding weights to be sent to each neuron
+                                    route(N*(n+1)+n, N*(2*n+1), 
                                     par(i, (n+1)*N, (i+1,i+1+n*int(i / (n+1)))),
                                     par(i, N, par(j, n, (j+1+(n+1)*N, (j+1+(i+1)*(n+1)+i*(n))))))
+                                    // Apply the neuron to each set of inputs
                                     : par(i, N, (neuron(n, activationFn, learningRate)))
+                                    // Pushing all the outputs (y) to the top and gradients and biases to the bottom
                                     : route((2*n+2)*N, (2*n+2)*N, par(i, N, (i*(2*n+2)+1, i+1)),
                                     par(i, N, par(j, 2*n+1, (i*(2*n+2)+j+2, N+i*(2*n+1)+j+1))));
 
+// We propose using backpropagation in Faust to act as an independent environment. 
+// This is because backpropagation is a complex process that requires a lot of computation.
+// Note that this implementation has a limitation that violates automatic differentiation. We follow symbolic differentiation in certain stages of the process.
+// Read the documentation for more details.
 backpropNN(params) = environment {
-        N = ba.count(params) / 2; // number of fcs
+        // Calculate the number of FCs in the network
+        N = ba.count(params) / 2;
 
         // 0 = N-indexed (from 0 to N-1)
-        next_lines(0) = 0;
-        next_lines(n) = next_lines(n-1) + ((ba.take(2*(N-n+1), params))*2+1)*(ba.take(2*(N-n+1)-1, params));
+        // This recursive function calculates the number of gradients of the previous layers that should be allowed to pass through.
+        // This is necessary for the routing process. Note that this recursive function is N-indexed i.e Nth layer is represented as 0 here.
+        // This means that at the Nth layer, the number of gradients that should be allowed to pass through is 0.
+        // This is because the Nth layer is the last layer in the network. 
+        next_signals(0) = 0;
+        next_signals(n) = next_signals(n-1) + ((ba.take(2*(N-n+1), params))*2+1)*(ba.take(2*(N-n+1)-1, params));
 
-        // 1 = 1-indexed
-        prev_lines(1) = (ba.take(2, params) + 1)*ba.take(1, params) + 1;
-        prev_lines(n) = prev_lines(n-1) + ((ba.take(2*n, params))+1)*(ba.take(2*n-1, params));
+        // 1 = 1-indexed (from 1 to N-1)
+        // This recursive function calculates the number of gradients of the next layers that should be allowed to pass through.
+        // This is necessary for the routing process. Note that this recursive function is 1-indexed. Note that 0 is not valid here due to the fact that the output neuron already has gradients ready for backpropagation.
+        // This means that at the 1st layer, the number of gradients that should be allowed to pass through is number of gradients of the output layer.
+        // This is because the 1st layer is the first layer in the network. Furthermore, 1-indexing is used to allow for the 0th layer to be the output layer.
+        prev_signals(1) = (ba.take(2, params) + 1)*ba.take(1, params) + 1;
+        prev_signals(n) = prev_signals(n-1) + ((ba.take(2*n, params))+1)*(ba.take(2*n-1, params));
 
-        helper(M) = par(i, prev_lines(M), _), df.backpropFC(ba.take(2*M+2, params), ba.take(2*M+1, params)), par(i, next_lines(N-M-1), _);
+        // This consolidates the previous, backpropagation of the current layer and next gradients in one function.
+        backprop_helper(M) = par(i, prev_signals(M), _), df.backpropFC(ba.take(2*M+2, params), ba.take(2*M+1, params)), par(i, next_signals(N-M-1), _);
 
-        // go from 1 to N-1
-        start(1) = helper(1);
-        start(N) = start(N-1) : helper(N);
+        // This recursive function allows us to start the backpropagation process for entire NN.
+        start(1) = backprop_helper(1);
+        start(N) = start(N-1) : backprop_helper(N);
 };
 
-// In: Number of inputs (N), number of neurons (n)
-backpropFC(N, n) = route((2*N+1)*n + n, (2*N+1)*n + n, par(i, n, (i+1, i+1+(2*N+1)*i), 
+// This is the core of the backpropagation process. This is where we calculate the gradients per FC. 
+// Note that this process follows a bit of symbolic differentiation. 
+backpropFC(N, n) = // Start off with routing the outputs of the previous backpropagation layer to the chain rule mechanism.
+        route((2*N+1)*n + n, (2*N+1)*n + n, par(i, n, (i+1, i+1+(2*N+1)*i), 
         par(j, 2*N+1, (n+j+1+(2*N+1)*i, (i*(2*N+2)+1) + j+1))))
+        // Apply the chain rule mechanism to calculate the gradients of the current FC.
         : par(i, n, autoChainRule) : prepareGrads(N, n) 
+        // Average the gradients of the current FC -- this is necessary for the backpropagation process.
         : par(i, (N+1)*n, _), gradAveraging(N, n)
         with {
+            // This is the chain rule mechanism. It is used to calculate the gradients of the current FC.
             autoChainRule = route(2*N+2, 4*N+2, par(i, 2*N+1, (1, 2*i+1), (i+2, 2*i+2))) : autoChain;
+            // This step abuses the autodifferation operators to attempt to do chain rule. It is a limitation and is by technicality not autodifferentiation.
             autoChain = par(i, 2*N+1, (v.var(1), d.input : d.diff(*)) : _, si.block(4*N+2)
                         with {
                             v = df.vars((par(j, 4*N+2, _)));
@@ -895,9 +933,11 @@ backpropFC(N, n) = route((2*N+1)*n + n, (2*N+1)*n + n, par(i, n, (i+1, i+1+(2*N+
                         }
                     );
 
+            // Prepares the gradients to be recursed backwards to the FC for updating the weights and biases.
             prepareGrads(N, n) = route((2*N+1)*n, (2*N+1)*n, par(i, n, 
                         par(j, N+1, (j+1+i*(2*N+1), (1+N)*i+(j+1))), 
                         par(k, N, (k+1+N+1+(i)*(2*N+1),(k+1+i*N+((N+1)*n))))));
             
+            // This averages the gradients of the current FC. This is necessary for the backpropagation process.
             gradAveraging(N, n) = route(N*n, N*n, par(i, N+1, par(j, n, (j+i*N+1, i+1+j*n)))) : par(i, N, sum(j, n, _)) : par(i, N, _ : /(n));
         };
