@@ -1607,6 +1607,8 @@ This does backpropagation of the entire NN -- but we internally do backpropagati
 #### Gradient Averaging 
 Each neuron in an FC tends to produce a duplicate of the input gradients i.e. in this figure, each neuron produces input gradients (apart from the other 3 gradients):
 
+![](./images/diff-gradAvg.png)
+
 $$
 \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}
 $$
