@@ -64,8 +64,8 @@ DDSP experiments in Faust.
         - [Activation Functions \& Loss](#activation-functions-and-loss)
         - [Backpropagation](#backpropagation)
           - [Gradient Averaging](#gradient-averaging)
-        - [A Generalized Example]
-      - [Tips for setting up an FC]
+        - [A Generalized Example](#a-generalized-example)
+      - [Tips for setting up an NN](#final-tips-for-creation-of-a-neural-network)
 
 - [Roadmap](#roadmap)
 
