@@ -2,22 +2,22 @@ df = library("diff.lib");
 import("stdfaust.lib");
 
 // This example is a demonstration of a neural network with three hidden layers. 
-// The developers have attempted to make it as user-friendly as possible, but the user would need to use some basic math to create an example.
+// The Faust-developer would need to use some basic math to create an example.
 
 // We will go through this example step by step.
-process = si.bus(1) // This is your input signal (1 channel). Since you have only one signal, you are expected to have a FC that can take in only 1 input signal.
+process = si.bus(1) // This is the input signal (1 channel). Since you have only one signal, you are expected to have a FC that can take in only 1 input signal.
         : (df.fc(2, 1, df.activations.sigmoid, 1e-7) // This is the first hidden layer. It has 2 neurons and 1 output signal. The activation function is sigmoid and the learning rate is 1e-7.
-        // The user needs to note a few things here. The layer the user just defined has 2 neurons and 1 output signal. 
+        // Take note of few things here. The layer just defined has 2 neurons and 1 output signal. 
         // As a result, each neuron produces 1 signal. Thus, the next layer should have 2 input signals.
         : (df.fc(3, 2, df.activations.sigmoid, 1e-7), // This is the second hidden layer. It has 3 neurons and 2 input signals. The activation function is sigmoid and the learning rate is 1e-7.
-        par(i, b.next_signals(1), _) // You must have this after the second hidden layer. This is a parallel operation that allows the gradients of the first layer to passed through the circuit for backpropagation.
-        // For user-friendliness, you can just use b.next_signals(N) where N is the number of FCs that was defined before this layer.
+        par(i, b.next_signals(1), _) // You must have this after the second hidden layer. This is to pass through gradients of the first layer for backpropagation.
+        // We can just use b.next_signals(N) where N is the number of FCs that was defined before this layer.
         // The previous layer had 3 neurons, so the next layer should have 3 input signals.
         : ((df.fc(1, 3, df.activations.sigmoid, 1e-7) // This is the third hidden layer. It has 1 neuron and 3 input signals. The activation function is sigmoid and the learning rate is 1e-7.
-        : df.losses.L1(1<<3, 1, 3)), // Note that this is the last layer of the NN. As a result, you can calculate the loss here. The loss function is L1.
-        par(i, b.next_signals(2), _) // You must have this after the third hidden layer. This is a parallel operation that allows the gradients of the first+second layer to passed through the circuit for backpropagation.
+        : df.losses.L1(1<<3, 1, 3)), // Note that this is the last layer of the NN. Loss can be calculated here. We use an L1 (MAE) norm loss function.
+        par(i, b.next_signals(2), _) // You must have this after the third hidden layer. This is to pass the gradients of the first+second layer for backpropagation.
         // This marks the end of the NN. It's now time to backpropagate the gradients.
-        : b.start(b.N - 1)) // This is a static statement that tells the compiler to start backpropagation from the last layer.
+        : b.start(b.N - 1)) // This statement indicates that backpropagation should start from the last layer and continues until backprop for all layers is completed.
         // Once the backpropagation is done, you can use the gradients to update the weights of the NN.
         // So... how does one know how many signals to backpropagate? 
         // We need to start from the most recent layer and work our way back to the first layer.
@@ -37,3 +37,5 @@ process = si.bus(1) // This is your input signal (1 channel). Since you have onl
             // As a result, the arguments to this function would be (1, 3, 3, 2, 2, 1).
             b = df.backpropNN((1, 3, 3, 2, 2, 1));
         };
+
+        // The recursion circuit can be simplified in the library, we will cover this as future work.
