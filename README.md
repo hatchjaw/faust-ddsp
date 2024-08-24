@@ -1618,7 +1618,7 @@ df.gradAveraging(N, n)
 Here, $N$ refers to the number of neurons in that FC, $n$ refers to the number of inputs in that FC.
 
 ### A Generalized Example
-Let's take up the example in [fc.dsp](./examples/experiments/fc.dsp). The comments in this example are extensive and should guide you throughout the process.
+Let's take up the example in [fc.dsp](./examples/experiments/fc.dsp) and [fc-3.dsp](./examples/experiments/fc-3.dsp). The comments in this example are extensive and should guide you throughout the process.
 
 This segment of code is extremely generalized and you may add more layers / more backpropagation environment elements as needed.
 
@@ -1629,5 +1629,6 @@ This segment of code is extremely generalized and you may add more layers / more
 ## Roadmap
 - Automatic parameter normalisation...
 - Batched training data/ground truth...
-- Offline training
+- Offline training / inference...
+- More layers such as convolved / recurrent...
 - Exploration of the limitation in backprop...
