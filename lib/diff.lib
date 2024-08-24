@@ -38,7 +38,12 @@ with {
 
 // Might not be the right name.
 backprop(groundTruth,learnable,lossFunction) = (
-    route(nvars+nInputs,nvars+nInputs,par(n,nvars,(n+1,n+3)),(nvars+1,1),(nvars+2,2))
+        route(nvars+nInputs, nvars+nInputs,
+            // Route incoming gradients to learnable.
+            par(n, nvars, (n+1, n+1+nInputs)), 
+            // Route input signals to groundTruth and learnable.
+            par(n, nInputs, (n+1+nvars, n+1))
+        )
         : vgroup("Hidden", groundTruth),vgroup("Learned", learnable)
         : route(2+nvars,4+nvars,
             // Route ground truth output to loss/gradient function and to output.
@@ -56,26 +61,6 @@ backprop(groundTruth,learnable,lossFunction) = (
 with {
     nvars = inputs(learnable),inputs(groundTruth) : -;
     nInputs = inputs(groundTruth),2 : *;
-};
-
-backpropNoInput(groundTruth,learnable,lossFunction) = (
-    route(nvars,nvars,par(n,nvars,(n+1,n+1)))
-        : vgroup("Hidden", groundTruth),vgroup("Learned", learnable)
-        : route(2+nvars,4+nvars,
-            // Route ground truth output to loss/gradient function and to output.
-            (1,1),(1,nvars+3),
-            // Route learnable output to loss/gradient function and to output.
-            (2,2),(2,nvars+4),
-            // Route gradients to loss/gradient function.
-            par(n,nvars,(n+3,n+3))
-        )
-        : vgroup("[1]Loss/gradient", lossFunction,_,_)
-        // Feed the gradients back.
-        ) ~ (!,si.bus(nvars))
-        // Block the gradients, post-recursion.
-    : _,si.block(nvars),_,_
-with {
-    nvars = inputs(learnable);
 };
 
 //========================Differentiable environment============================
@@ -599,16 +584,16 @@ env(vars) = environment {
     // 
     //==========================================================================
     // Stochastic gradient descent
-    optimizeSGD(learningRate) = par(i,vars.N,_,learningRate : *);
-    // RMSProp
-    optimizeRMSProp(learningRate,rho) = par(i, vars.N, (_ <: _,(_ :((_ : ^(2)) : *(1 - rho)) : +~(_ : *(rho))))
-        : _,(sqrt : +(ma.EPSILON)) : / : *(learningRate)); 
-    // Adam's
-    optimizeAdam(learningRate,beta1,beta2) = par(i, vars.N, (_ <: (_ : *(1 - beta1) : +~(_ : *(beta1)))
-        ,((_ : ^(2)) : *(1 - beta2) : +~(_ : *(beta2))))
-        : /(1 - beta1),/(1 - beta2)
-        : _,(sqrt : +(ma.EPSILON))
-        : / : *(learningRate));
+    optimizer = environment {
+        SGD(learningRate) = par(i,vars.N,_,learningRate : *);
+        RMSProp(learningRate,rho) = par(i, vars.N, (_ <: _,(_ :((_ : ^(2)) : *(1 - rho)) : +~(_ : *(rho))))
+                    : _,(sqrt : +(ma.EPSILON)) : / : *(learningRate)); 
+        Adam(learningRate,beta1,beta2) = par(i, vars.N, (_ <: (_ : *(1 - beta1) : +~(_ : *(beta1)))
+                    ,((_ : ^(2)) : *(1 - beta2) : +~(_ : *(beta2))))
+                    : /(1 - beta1),/(1 - beta2)
+                    : _,(sqrt : +(ma.EPSILON))
+                    : / : *(learningRate));
+    };
 
     //===========================Loss functions=================================
     //
@@ -798,8 +783,7 @@ env(vars) = environment {
 //===========================Activation Functions===========================
 //
 //==========================================================================
-// We define activation functions in an environment in order to introduce an element of autodifferentation to them.
-// This is especially effective when we need to use the activation functions in a neural network. It is convenient for our use.
+// We define activation functions in an environment.
 activations = environment {
     sigmoid(d) = d.diff(0),d.diff(_) : d.diff(-) : d.diff(1),d.diff(exp),d.diff(1) : d.diff(_),d.diff(+) : d.diff(/);
 };
@@ -807,7 +791,7 @@ activations = environment {
 //===========================Loss Functions=================================
 //
 //==========================================================================
-// Similar to activation functions, we define loss functions in an environment in order to introduce an element of autodifferentation to them.
+// Similar to activation functions, we define loss functions in an environment.
 // This is especially effective when we need to use the loss functions in a neural network. It is convenient for our use.
 // Note that these loss functions can ONLY be used in the context of a neural network and only the final fully connected layer.
 // This is because the loss functions are defined in terms of the output of the neural network.
@@ -823,9 +807,21 @@ losses = environment {
             d = env(v);
         };
     };
+
+    L2(windowSize, y, N) = lossFn(windowSize, y, _, N)
+    with {
+        lossFn(windowSize, y, yHat, N) = yHat - y, par(i, 2*N+1, _)
+                                    : window(windowSize, N), d.diff(2)
+                                    : d.diff(^)
+        with {
+            window(size, N) = par(i, 2*N+2, ba.slidingMean(size));
+            v = vars((par(i, 2*N+1, _)));
+            d = env(v);
+        };
+    };
 };
 
-//===========================Neuron time====================================
+//========================Neuron network blocks=============================
 //
 //==========================================================================
 // Core weights and biases definitions -- this is the core of the neural network.
@@ -834,7 +830,7 @@ bias(learningRate) = _ : *(learningRate) : -~_ <: attach(hbargraph("bias", -1, 1
 
 // Here, we define the neuron. This is the smallest element of a fully connected layer.
 // It takes in the number of inputs, the activation function, and the learning rate.
-// Note that the learning rate must be of the magnitude 1e-5 or less.
+// Experimentally, we noticed that learning rate should be of the magnitude 1e-5 or less; otherwise, the system seems unstable.
 // Input : w, b, x
 // Subprocesses: Convert inputs to z = w*x + b, apply activation function, calculate gradients
 // Output: y, dy/dw1, dy/dw2... dy/dwN, dy/db, dy/dx1, dy/dx2... dy/dxN
@@ -865,9 +861,8 @@ neuron(N, activation, learningRate) = cross : update_params : act : grad_route(N
                     : _, par(i, N, _), route(N+1, N+1, (N+1, 1), par(i, N, (i+1,i+2)));
     }; 
 
-// This is one of the most popular simplified layers of a neural network. It consists of a collection of neurons.
+// Fully connected (FC) layer is one of the most popular simplified layers of a neural network. It consists of a collection of neurons.
 // It takes in the number of neurons, the number of inputs, the activation function, and the learning rate.
-// Note that the learning rate must be of the magnitude 1e-5 or less.
 // Input : N (number of neurons), n (number of inputs), activation function, learning rate
 // Subprocesses: Routing the signals to the neurons
 // Output: y1, y2, ... yN, dy1/dw1, dy1/dw2... dy1/dwN, dy1/db1, dy2/dw1, dy2/dw2... dy2/dwN, dy2/db2, ... dyN/dw1, dyN/dw2... dyN/dwN, dyN/dbN, dy1/dx1, dy1/dx2... dy1/dxN, dy2/dx1, dy2/dx2... dy2/dxN, dyN/dx1, dyN/dx2... dyN/dxN
@@ -881,8 +876,7 @@ fc(N, n, activationFn, learningRate) = // Route signals appropriately -- allow t
                                     : route((2*n+2)*N, (2*n+2)*N, par(i, N, (i*(2*n+2)+1, i+1)),
                                     par(i, N, par(j, 2*n+1, (i*(2*n+2)+j+2, N+i*(2*n+1)+j+1))));
 
-// We propose using backpropagation in Faust to act as an independent environment. 
-// This is because backpropagation is a complex process that requires a lot of computation.
+// Backpropagation is implemented as a separate differentiable environment.
 // Note that this implementation has a limitation that violates automatic differentiation. We follow symbolic differentiation in certain stages of the process.
 // Read the documentation for more details.
 backpropNN(params) = environment {
@@ -914,7 +908,7 @@ backpropNN(params) = environment {
 };
 
 // This is the core of the backpropagation process. This is where we calculate the gradients per FC. 
-// Note that this process follows a bit of symbolic differentiation. 
+// Note that this process follows symbolic differentiation. Read the documentation about the reasoning for the same.
 backpropFC(N, n) = // Start off with routing the outputs of the previous backpropagation layer to the chain rule mechanism.
         route((2*N+1)*n + n, (2*N+1)*n + n, par(i, n, (i+1, i+1+(2*N+1)*i), 
         par(j, 2*N+1, (n+j+1+(2*N+1)*i, (i*(2*N+2)+1) + j+1))))
@@ -925,7 +919,7 @@ backpropFC(N, n) = // Start off with routing the outputs of the previous backpro
         with {
             // This is the chain rule mechanism. It is used to calculate the gradients of the current FC.
             autoChainRule = route(2*N+2, 4*N+2, par(i, 2*N+1, (1, 2*i+1), (i+2, 2*i+2))) : autoChain;
-            // This step abuses the autodifferation operators to attempt to do chain rule. It is a limitation and is by technicality not autodifferentiation.
+            // This step completes the chain rule mechanism and provides the appropriate gradients for recursion.
             autoChain = par(i, 2*N+1, (v.var(1), d.input : d.diff(*)) : _, si.block(4*N+2)
                         with {
                             v = df.vars((par(j, 4*N+2, _)));
