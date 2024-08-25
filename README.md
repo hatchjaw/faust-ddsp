@@ -39,8 +39,10 @@ DDSP experiments in Faust.
     - [Differentiable Phasor](#differentiable-phasor)
     - [Differentiable Oscillator](#differentiable-oscillator)
     - [Differentiable `sum` iteration](#differentiable-sum-iteration)
-    - [ML Circuits](#ml-circuits)
+  - [Machine Learning](#machine-learning)
+    - [Parameter Estimation](#parameter-estimation)
       - [Backpropagation circuit](#backpropagation-circuit)
+    - [Core Machine Learning (ML) Circuits](#core-machine-learning-ml-circuits)
       - [Loss Functions](#loss-functions)
         - [MAE Function (Time-Domain)](#l1-time-domain-mae)
         - [MSE Function (Time-Domain)](#l2-time-domain-mse)
@@ -65,7 +67,7 @@ DDSP experiments in Faust.
         - [Backpropagation](#backpropagation)
           - [Gradient Averaging](#gradient-averaging)
         - [A Generalized Example](#a-generalized-example)
-      - [Tips for setting up an NN](#final-tips-for-creation-of-a-neural-network)
+      - [Tips for setting up a neural network](#final-tips-for-creation-of-a-neural-network)
 
 - [Roadmap](#roadmap)
 
@@ -855,7 +857,7 @@ uses whichever is the largest of $\cos^2(u)$ and $1\times10^{-10}$.
 process = d.diff(tan);
 ```
 
-![](./images/difftan.png)
+![](./images/difftan.svg)
 
 #### `asin` Primitive
 
@@ -878,7 +880,7 @@ uses whichever is the largest of $\sqrt{1-u^2}$ and $1\times10^{-10}$.
 process = d.diff(asin);
 ```
 
-![](./images/diffasin.png)
+![](./images/diffasin.svg)
 
 #### `acos` Primitive
 
@@ -901,7 +903,7 @@ uses whichever is the largest of $\sqrt{1-u^2}$ and $1\times10^{-10}$.
 process = d.diff(acos);
 ```
 
-![](./images/diffacos.png)
+![](./images/diffacos.svg)
 
 #### `atan` Primitive
 
@@ -921,7 +923,7 @@ $$
 process = d.diff(atan);
 ```
 
-![](./images/diffatan.png)
+![](./images/diffatan.svg)
 
 #### `atan2` Primitive
 
@@ -941,7 +943,7 @@ $$
 process = d.diff(atan2);
 ```
 
-![](./images/diffatan2.png)
+![](./images/diffatan2.svg)
 
 #### `exp` Primitive
 
@@ -961,7 +963,7 @@ $$
 process = d.diff(exp);
 ```
 
-![](./images/diffexp.png)
+![](./images/diffexp.svg)
 
 #### `log` Primitive
 
@@ -981,7 +983,7 @@ $$
 process = d.diff(log);
 ```
 
-![](./images/difflog.png)
+![](./images/difflog.svg)
 
 #### `log10` Primitive
 
@@ -1001,7 +1003,7 @@ $$
 process = d.diff(log10);
 ```
 
-![](./images/difflog10.png)
+![](./images/difflog10.svg)
 
 #### `sqrt` Primitive
 
@@ -1021,7 +1023,7 @@ $$
 process = d.diff(sqrt);
 ```
 
-![](./images/diffsqrt.png)
+![](./images/diffsqrt.svg)
 
 #### `abs` Primitive
 
@@ -1041,7 +1043,7 @@ $$
 process = d.diff(abs);
 ```
 
-![](./images/diffabs.png)
+![](./images/diffabs.svg)
 
 #### `min` Primitive
 
@@ -1067,7 +1069,7 @@ $$
 process = d.diff(min);
 ```
 
-![](./images/diffmin.png)
+![](./images/diffmin.svg)
 
 #### `max` Primitive
 
@@ -1093,7 +1095,7 @@ $$
 process = d.diff(max);
 ```
 
-![](./images/diffmax.png)
+![](./images/diffmax.svg)
 
 #### `floor` Primitive
 
@@ -1113,7 +1115,7 @@ $$
 process = d.diff(floor);
 ```
 
-![](./images/difffloor.png)
+![](./images/difffloor.svg)
 
 #### `ceil` Primitive
 
@@ -1133,7 +1135,7 @@ $$
 process = d.diff(ceil);
 ```
 
-![](./images/diffceil.png)
+![](./images/diffceil.svg)
 
 **Remainder of the primitives are defined as the following:**
 
@@ -1212,8 +1214,8 @@ A utility function used to iterate `N` times through a summation of dual signals
 ```faust
 sumall(N)
 ```
-
-#### Machine Learning (ML) Circuits
+### Machine Learning
+#### Parameter Estimation 
 ##### Backpropagation circuit
 This backpropagation circuit is exclusively for _parameter estimation_ and it functions via the creation of gradients and a loss function in order to guide the `learnable` parameter to the `groundTruth`. The available loss functions can be found below.
 
@@ -1228,7 +1230,7 @@ df = library("diff.lib");
 ...
 process = df.backprop(groundTruth, learnable, lossFunction);
 ```
-
+#### Core Machine Learning (ML) Circuits
 ##### Loss Functions
 
 This loss function accepts a `windowSize` parameter that allows Faust to record the (ba.)slidingMean of the last `windowSize` inputs to the loss function. This allows the input to be averaged over a small period of time and avoid random spikes of inputs or inconsistencies in signals. This loss function also calculates the loss as well the gradients to guide the `learnable` parameter to the required `truth` parameter.
@@ -1326,7 +1328,7 @@ while, gradients are defined in autodiff as:
 $$
 G_\delta(y, \hat{y}) = 
 \begin{cases} 
-(y - \hat{y})^2 * \frac{\partial y}{\partial x} & \text{for } |y - \hat{y}| \le \delta, \\ 
+(y - \hat{y})^2 \cdot \frac{\partial y}{\partial x} & \text{for } |y - \hat{y}| \le \delta, \\ 
 \delta \cdot \left(\frac{y - \hat{y}}{|y - \hat{y}|}\right) \cdot \frac{\partial y}{\partial x} & \text{otherwise.}
 \end{cases}
 $$
@@ -1395,7 +1397,7 @@ We recommend rho to be 0.9; similar to Kera's recommendations.
 An implementation of any of the above optimizers can be seen below:
 
 ```faust
-df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizeSGD(1e-3)))
+df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizer.SGD(1e-3)))
 ```
 
 [^6]: https://arxiv.org/abs/1412.6980
@@ -1411,17 +1413,17 @@ We introduce the concept of a single functioning neuron in example [single_neuro
 
 The structure of a single neuron looks something like so: 
 
-![](./images/single_neuron.png)
+![](./images/single_neuron.svg)
 
 In Faust, this looks something like this, along with the backpropagation algorithm:
 
-![](./images/example_neuron.png)
+![](./images/example-neuron.svg)
 
 So, what exactly happens in a neuron? Say we use a sigmoid function as a non-linear activation function in this example.
 The hidden layer calculates the following:
 
 $$
-a_{1} = w1 \cdot x1 + w2 \cdot x2 + w3 \cdot x3
+a_{1} = w1 \cdot x1 
 $$
 
 $$
@@ -1473,7 +1475,7 @@ A fully connected layer, also known as a dense layer, is a fundamental component
 #### Example: One FC
 Let's begin with the math involved with the forward-pass and the backward-pass in a fully connected layer (FCL). Let's first begin with a simple example of an output FC, consisting of one neuron only.
 
-![](./images/diff-singlefc.png)
+![](./images/diff-singlefc.svg)
 
 This example involves 7 signals passing through the neuron (3 weights, 1 bias, 3 inputs). We will denote weights as $w$, biases as $b$ and inputs as $x$.
 
@@ -1502,7 +1504,7 @@ Mathematically speaking, we can expect $2N+2$ signals as a output from an FCL, a
 
 Let's take a more complex example. This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a 3-layered FCL here. The first layer contains 2 neurons, the second layer contains 3 neuron and the final layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FCL to be $FC_{1}$, the second FCL to be $FC_{2}$ and the third FCL to be $FC_{3}$. The inputs for $FC_{1}$ are $x1$ only. 
 
-![](./images/diff-threelayerfc.png)
+![](./images/diff-threelayerfc.svg)
 
 The other input signals to the FCL are the gradients of the weights and biases to each neuron. $FC_{1}$ contains 2 neurons. From each neuron, we expect the following -- since this is NOT the final layer, we do not calculate the loss yet. As a result, here is what we expect from each neuron, assuming it has one input $x1$ and the weights are $w1$ and bias is $b$:
 
@@ -1519,6 +1521,7 @@ Let's move on to the second FCL $FC_{2}$. The outputs of $FC_{1}$ i.e. $y1, y2$ 
 $$
 { y1, y2, y3, \frac{\partial y1}{\partial w1'}, \frac{\partial y1}{\partial w2'}, \frac{\partial y1}{\partial b'}, \frac{\partial y1}{\partial x1'}, \frac{\partial y1}{\partial x2'} ... } 
 $$
+
 The same pattern is observed for $y2$ and $y3$. The same occurs for $FC_{3}$. $FC_{2}$ had 3 neurons -- 3 outputs and hence, $FC_{3}$ must have 3 inputs. $FC_{3}$ must produce 1 output only (since this is a classification task) and hence, we notice that it must have 1 neuron only. It produces the following.
 
 $$
@@ -1529,7 +1532,7 @@ Here, $x1''$, $x2''$, $x3''$ are the inputs to $FC_{3}$ or the outputs of $FC_{2
 
 Now, we need to appropriately modify the gradients that each neuron produced by $FC_{1}$ and $FC_{2}$. We do so by the simple chain rule. This is where we see a limitation of this specific algorithm. Chain rule, in this context, is a representation of symbolic differentation. 
 
-We have $<\frac{\partial L}{\partial x1^{'''}}, \frac{\partial L}{\partial x2^{'''}}, \frac{\partial L}{\partial x3^{'''}}>$ in hand. These are essentially $<\frac{\partial L}{\partial y1}, \frac{\partial L}{\partial y2}, \frac{\partial L}{\partial y3}>$. 
+We have $\frac{\partial L}{\partial x1^{'''}}, \frac{\partial L}{\partial x2^{'''}}, \frac{\partial L}{\partial x3^{'''}}$ in hand. These are essentially $\frac{\partial L}{\partial y1}, \frac{\partial L}{\partial y2}, \frac{\partial L}{\partial y3}$. 
 
 
 We now use the chain rule to produce the following gradients:
@@ -1583,7 +1586,7 @@ Here, $y$ refers to the target variable that are looking for; $N$ refers to the 
 
 
 ### Backpropagation
-Let's first define how to create a backpropagation environment. Our backpropagation environment requires knowledge about the parameters of the entire NN. 
+Let's first define how to create a backpropagation environment. Our backpropagation environment requires knowledge about the parameters of the entire neural network. 
 
 
 ```faust
@@ -1598,12 +1601,12 @@ To begin backpropagation itself, we ensure that it occurs in an end-to-end manne
 b.start(b.N - 1)
 ```
 
-This does backpropagation of the entire NN -- but we internally do backpropagation layer by layer (i.e. FC by FC). It ignores the last layer, since the loss function automatically provides the gradients for backprop. The rest of the layers use this algorithm recursively.
+This does backpropagation of the entire neural network -- but we internally do backpropagation layer by layer (i.e. FC by FC). It ignores the last layer, since the loss function automatically provides the gradients for backprop. The rest of the layers use this algorithm recursively.
 
 #### Gradient Averaging 
 Each neuron in an FC tends to produce a duplicate of the input gradients i.e. in this figure, each neuron produces input gradients (apart from the other 3 gradients):
 
-![](./images/diff-gradAvg.png)
+![](./images/diff-gradAvg.svg)
 
 $$
 \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}
@@ -1630,5 +1633,5 @@ This segment of code is extremely generalized and you may add more layers / more
 - Automatic parameter normalisation...
 - Batched training data/ground truth...
 - Offline training / inference...
-- More layers such as convolved / recurrent...
+- More layers such as convoluted / recurrent...
 - Exploration of the limitation in backprop...
