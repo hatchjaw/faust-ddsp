@@ -851,7 +851,7 @@ neuron(N, activation, learningRate) = cross : update_params : act : grad_route(N
         act = routing : (par(i, N, v.var(i+1),v.var(i+1+N) : d.diff(*)) : d.sumall(N)),v.var(2*N+1) : d.diff(+)
             : acti
             with {
-                v = vars((par(i, N+1, _), weights(N, learningRate), bias(learningRate)));
+                v = vars((par(i, 2*N+1, _)));
                 d = env(v);
                 acti = activation(d); 
             };
