@@ -4,7 +4,7 @@ df = library("diff.lib");
 NTAPS = 8;
 
 process = in <: _,_
-    : hgroup("Differentiable FIR",df.backprop(truth,learnable,d.learnMSE(1<<3,d.optimizer.SGD(1e-1))))
+    : hgroup("Differentiable FIR",df.backprop(truth,learnable,d.learnMSE(1<<3,d.optimizers.SGD(1e-1))))
     // : !,_,_
 with {
     in = no.noise;

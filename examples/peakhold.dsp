@@ -2,7 +2,7 @@ import("stdfaust.lib");
 df = library("diff.lib");
 
 process = no.noise <: _,_
-        : df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizer.SGD(1e-3)))
+        : df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizers.SGD(1e-3)))
         with {
             m = hslider("Mode",0,0,1,1);
             truth = (*(m),_ : max) ~ _;

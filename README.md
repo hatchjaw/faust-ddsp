@@ -596,7 +596,7 @@ process = d.diff(_);
 
 ![](./images/diffwire.svg)
 
-### Cut Primitive
+#### Cut Primitive
 
 ```faust
 diff(!)
@@ -1279,7 +1279,7 @@ $$
 G = 2 \cdot (y - \hat{y}) \cdot \frac{\partial y}{\partial x}
 $$
 
-where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter.
+where $y$ is your model output (learnable signal), while $\hat{y}$ is your true signal.
 
 ###### MSLE time-domain
 
@@ -1302,7 +1302,7 @@ $$
 G = 2 \cdot \frac{\log(y + 1) - \log(\hat{y} + 1)}{y + 1} \cdot \frac{\partial y}{\partial x}
 $$
 
-where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter.
+where $y$ is your model output (learnable signal), while $\hat{y}$ is your true signal.
 
 ###### Huber time-domain
 
@@ -1333,7 +1333,7 @@ G_\delta(y, \hat{y}) =
 \end{cases}
 $$
 
-where $y$ is your learnable parameter, while $\hat{y}$ is your truth parameter; a suggested $\delta$ is 1.0.
+where $y$ is your model output (learnable signal), while $\hat{y}$ is your true signal; a suggested $\delta$ is 1.0.
 
 ###### Linear frequency-domain
 NB. This loss function converges to the global minimum for the range $[140, 1350]$ Hz. This was tested with `os.osc` and `os.square` waveform. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minima. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue. We report that RMSProp seems to break out of the minimum at some threshold and it seems to train well until another minimum. As a result, we suspect that the loss landscape is a series of plateaus and hence, a suitable learning rate scheduler (such as, an oscillating learning rate) and a good optimizer is required to solve this problem.
@@ -1374,14 +1374,14 @@ We suggest the use of this only when using SGD as the optimizer.
 This is a regular stochastic gradient descent optimizer which does not account for an adaptive learning rate. This performs pure gradient descent.
 
 ```faust
-optimizer.SGD(learningRate)
+optimizers.SGD(learningRate)
 ```
 
 ###### Adam Optimizer
 This is an optimizer, implemented as per the original Adam paper[^6].
 
 ```faust
-optimizer.Adam(learningRate, beta1, beta2)
+optimizers.Adam(learningRate, beta1, beta2)
 ```
 
 We recommend beta1 and beta2 to be 0.9 and 0.999; similar to Kera's recommendations.
@@ -1390,21 +1390,21 @@ We recommend beta1 and beta2 to be 0.9 and 0.999; similar to Kera's recommendati
 This is an optimizer, implemented as per the original RMSProp presentation[^7].
 
 ```faust
-optimizer.RMSProp(learningRate, rho)
+optimizers.RMSProp(learningRate, rho)
 ```
 We recommend rho to be 0.9; similar to Kera's recommendations.
 
 An implementation of any of the above optimizers can be seen below:
 
 ```faust
-df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizer.SGD(1e-3)))
+df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizers.SGD(1e-3)))
 ```
 
 [^6]: https://arxiv.org/abs/1412.6980
 [^7]: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
 
-## Neural Networks (NN)
-The core component of NNs is a neuron. We introduce the concept of a neuron in this library.
+## Neural Networks
+The core component of neural networks is a neuron. We introduce the concept of a neuron in this library.
 
 We can see that the task of parameter estimation creates an instance of overfitting to a particular value. As a result, there is a need to create a more generalized model that can accurately predict / classify things in the audio-domain. The issue is the creation of a fully functioning ML model that can create accurate weights and biases to deal with tasks such as classification, regression and more. This can also be extended to more complex models such as the creation of generative models, such as autoencoders. 
 
@@ -1502,7 +1502,7 @@ Mathematically speaking, we can expect $2N+2$ signals as a output from an FCL, a
 
 #### Example: Two+ FCs
 
-Let's take a more complex example. This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a 3-layered FCL here. The first layer contains 2 neurons, the second layer contains 3 neuron and the final layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FCL to be $FC_{1}$, the second FCL to be $FC_{2}$ and the third FCL to be $FC_{3}$. The inputs for $FC_{1}$ are $x1$ only. 
+Let's take a more complex example -- this example deals with the creation of a binary classifier (0 and 1 only). This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a 3-layered FCL here. The first layer contains 2 neurons, the second layer contains 3 neuron and the final layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FCL to be $FC_{1}$, the second FCL to be $FC_{2}$ and the third FCL to be $FC_{3}$. The inputs for $FC_{1}$ are $x1$ only. 
 
 ![](./images/diff-threelayerfc.svg)
 
@@ -1522,7 +1522,7 @@ $$
 { y1, y2, y3, \frac{\partial y1}{\partial w1'}, \frac{\partial y1}{\partial w2'}, \frac{\partial y1}{\partial b'}, \frac{\partial y1}{\partial x1'}, \frac{\partial y1}{\partial x2'} ... } 
 $$
 
-The same pattern is observed for $y2$ and $y3$. The same occurs for $FC_{3}$. $FC_{2}$ had 3 neurons -- 3 outputs and hence, $FC_{3}$ must have 3 inputs. $FC_{3}$ must produce 1 output only (since this is a classification task) and hence, we notice that it must have 1 neuron only. It produces the following.
+The same pattern is observed for $y2$ and $y3$. The same occurs for $FC_{3}$. $FC_{2}$ had 3 neurons -- 3 outputs and hence, $FC_{3}$ must have 3 inputs. $FC_{3}$ must produce 1 output only (since we assumed that this is a classification task) and hence, we notice that it must have 1 neuron only. It produces the following.
 
 $$
 { L, \frac{\partial L}{\partial w1''}, \frac{\partial L}{\partial w2''}, \frac{\partial L}{\partial w3''}, \frac{\partial L}{\partial b''}, \frac{\partial L}{\partial x1''}, \frac{\partial L}{\partial x2''}, \frac{\partial L}{\partial x3''} }
@@ -1532,7 +1532,7 @@ Here, $x1''$, $x2''$, $x3''$ are the inputs to $FC_{3}$ or the outputs of $FC_{2
 
 Now, we need to appropriately modify the gradients that each neuron produced by $FC_{1}$ and $FC_{2}$. We do so by the simple chain rule. This is where we see a limitation of this specific algorithm. Chain rule, in this context, is a representation of symbolic differentation. 
 
-We have $\frac{\partial L}{\partial x1^{'''}}, \frac{\partial L}{\partial x2^{'''}}, \frac{\partial L}{\partial x3^{'''}}$ in hand. These are essentially $\frac{\partial L}{\partial y1}, \frac{\partial L}{\partial y2}, \frac{\partial L}{\partial y3}$. 
+We have $\frac{\partial L}{\partial x1'''}, \frac{\partial L}{\partial x2'''}, \frac{\partial L}{\partial x3'''}$ in hand. These are essentially $\frac{\partial L}{\partial y1}, \frac{\partial L}{\partial y2}, \frac{\partial L}{\partial y3}$. 
 
 
 We now use the chain rule to produce the following gradients:
