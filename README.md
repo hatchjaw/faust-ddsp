@@ -613,8 +613,6 @@ $$
 process = d.diff(!), _;
 ```
 
-![](./images/diffcut.svg)
-
 #### Add Primitive
 
 ```faust
@@ -1279,7 +1277,7 @@ $$
 G = 2 \cdot (y - \hat{y}) \cdot \frac{\partial y}{\partial x}
 $$
 
-where $y$ is your model output (learnable signal), while $\hat{y}$ is your true signal.
+where $y$ is your predicted output signal, while $\hat{y}$ is your target signal.
 
 ###### MSLE time-domain
 
@@ -1302,7 +1300,7 @@ $$
 G = 2 \cdot \frac{\log(y + 1) - \log(\hat{y} + 1)}{y + 1} \cdot \frac{\partial y}{\partial x}
 $$
 
-where $y$ is your model output (learnable signal), while $\hat{y}$ is your true signal.
+where $y$ is your predicted output signal, while $\hat{y}$ is your target signal.
 
 ###### Huber time-domain
 
@@ -1333,7 +1331,7 @@ G_\delta(y, \hat{y}) =
 \end{cases}
 $$
 
-where $y$ is your model output (learnable signal), while $\hat{y}$ is your true signal; a suggested $\delta$ is 1.0.
+where $y$ is your predicted output signal, while $\hat{y}$ is your target signal; a suggested $\delta$ is 1.0.
 
 ###### Linear frequency-domain
 NB. This loss function converges to the global minimum for the range $[140, 1350]$ Hz. This was tested with `os.osc` and `os.square` waveform. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minima. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue. We report that RMSProp seems to break out of the minimum at some threshold and it seems to train well until another minimum. As a result, we suspect that the loss landscape is a series of plateaus and hence, a suitable learning rate scheduler (such as, an oscillating learning rate) and a good optimizer is required to solve this problem.
@@ -1479,7 +1477,7 @@ Let's begin with the math involved with the forward-pass and the backward-pass i
 
 This example involves 7 signals passing through the neuron (3 weights, 1 bias, 3 inputs). We will denote weights as $w$, biases as $b$ and inputs as $x$.
 
-In this example, let us assume the incoming signals to be $w1, w2, w3, b, x1, x2, x3$. The neuron appropriately routes these parameters for backpropagation. As stated earlier, gradients are applied here:
+In this example, let us assume the incoming signals to be $w_{1}, w_{2}, w_{3}, b, x_{1}, x_{2}, x_{3}$. The neuron appropriately routes these parameters for backpropagation. As stated earlier, gradients are applied here:
 
 ```faust
 weights(n, learningRate) = par(i, n, _ : *(learningRate) : -~_ <: attach(hbargraph("weight%i", -1, 1)));
@@ -1495,56 +1493,56 @@ Since we deal with an output FCL only, we would need to calculate the losses whi
 Using the loss function (and autodiff), we produce the following from the FCL:
 
 $$
-{ L, \frac{\partial L}{\partial w1}, \frac{\partial L}{\partial w2}, \frac{\partial L}{\partial w3}, \frac{\partial L}{\partial b}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}, \frac{\partial L}{\partial x3} }
+{ L, \frac{\partial L}{\partial w_{1}}, \frac{\partial L}{\partial w_{2}}, \frac{\partial L}{\partial w_{3}}, \frac{\partial L}{\partial b}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial x_{3}} }
 $$
 
-Mathematically speaking, we can expect $2N+2$ signals as a output from an FCL, assuming $N$ inputs. Since this example is pretty simple, we can simply backpropagate the gradients of $w1, w2, w3, b$ with respect to L to the FCL. Note that users using this library must know the number of weights and biases a single FC takes in. We'll cover this in the next few sections.
+Mathematically speaking, we can expect $2N+2$ signals as a output from an FCL, assuming $N$ inputs. Since this example is pretty simple, we can simply backpropagate the gradients of $w_{1}, w_{2}, w_{3}, b$ with respect to L to the FCL. Note that users using this library must know the number of weights and biases a single FC takes in. We'll cover this in the next few sections.
 
 #### Example: Two+ FCs
 
-Let's take a more complex example -- this example deals with the creation of a binary classifier (0 and 1 only). This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a 3-layered FCL here. The first layer contains 2 neurons, the second layer contains 3 neuron and the final layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FCL to be $FC_{1}$, the second FCL to be $FC_{2}$ and the third FCL to be $FC_{3}$. The inputs for $FC_{1}$ are $x1$ only. 
+Let's take a more complex example -- this example deals with the creation of a binary classifier (0 and 1 only). While this example focuses on binary classification, the underlying principles can be extended to regression tasks. For instance, a binary classifier could be adapted to predict whether an input waveform is sinusoidal or square (view the working of the same here -- [fc-3.dsp](./examples/experiments/fc-3.dsp)). This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a 3-layered FCL here. The first layer contains 2 neurons, the second layer contains 3 neuron and the final layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FCL to be $FC_{1}$, the second FCL to be $FC_{2}$ and the third FCL to be $FC_{3}$. The inputs for $FC_{1}$ are $x_{1}$ only. 
 
 ![](./images/diff-threelayerfc.svg)
 
-The other input signals to the FCL are the gradients of the weights and biases to each neuron. $FC_{1}$ contains 2 neurons. From each neuron, we expect the following -- since this is NOT the final layer, we do not calculate the loss yet. As a result, here is what we expect from each neuron, assuming it has one input $x1$ and the weights are $w1$ and bias is $b$:
+The other input signals to the FCL are the gradients of the weights and biases to each neuron. $FC_{1}$ contains 2 neurons. From each neuron, we expect the following -- since this is NOT the final layer, we do not calculate the loss yet. As a result, here is what we expect from each neuron, assuming it has one input $x_{1}$ and the weights are $w_{1}$ and bias is $b$:
 
 $$
-{ y, \frac{\partial y}{\partial w1}, \frac{\partial y}{\partial b}, \frac{\partial y}{\partial x1} }
+{ y, \frac{\partial y}{\partial w_{1}}, \frac{\partial y}{\partial b}, \frac{\partial y}{\partial x_{1}} }
 $$
 
 Now, since we have multiple neurons in this FC, we route all the outputs (i.e. $y$) to the top of the circuit and hence, we can appropriately use the outputs to act as the input to the next FC. Users need to note that since this layer has 2 neurons, it will have 2 outputs (1 from each). As a result, the next FC (i.e. $FC_{2}$) will need to take in 2 inputs.
 
 What are we missing here to make these gradients appropriate for backpropagation? We're missing $\frac{\partial L}{\partial y}$ for each neuron. Since each neuron outputs a $y$, we need a partial derivative of L with respect to y in order to obtain true gradients for backpropagation.
 
-Let's move on to the second FCL $FC_{2}$. The outputs of $FC_{1}$ i.e. $y1, y2$ are now the inputs to this connected layer. What now? The same operation occurs and we attempt to produce the gradients (via end-to-end autodiff). Assume the inputs to this $FC_{2}$ to be now $x1', x2'$ instead of $y1, y2$. This $FC_{2}$ finally produces the following (3 $y$ due to 3 neurons):
+Let's move on to the second FCL $FC_{2}$. The outputs of $FC_{1}$ i.e. $y1, y2$ are now the inputs to this connected layer. What now? The same operation occurs and we attempt to produce the gradients (via end-to-end autodiff). Assume the inputs to this $FC_{2}$ to be now $x_{1}', x_{2}'$ instead of $y1, y2$. This $FC_{2}$ finally produces the following, assuming $w_{1}', w_{2}', b' ...$ to be the weights and biases of this layer (3 $y$ due to 3 neurons):
 
 $$
-{ y1, y2, y3, \frac{\partial y1}{\partial w1'}, \frac{\partial y1}{\partial w2'}, \frac{\partial y1}{\partial b'}, \frac{\partial y1}{\partial x1'}, \frac{\partial y1}{\partial x2'} ... } 
+{ y1, y2, y3, \frac{\partial y1}{\partial w_{1}'}, \frac{\partial y1}{\partial w_{2}'}, \frac{\partial y1}{\partial b'}, \frac{\partial y1}{\partial x_{1}'}, \frac{\partial y1}{\partial x_{2}'} ... } 
 $$
 
-The same pattern is observed for $y2$ and $y3$. The same occurs for $FC_{3}$. $FC_{2}$ had 3 neurons -- 3 outputs and hence, $FC_{3}$ must have 3 inputs. $FC_{3}$ must produce 1 output only (since we assumed that this is a classification task) and hence, we notice that it must have 1 neuron only. It produces the following.
+The same pattern is observed for $y2$ and $y3$. The same occurs for $FC_{3}$. $FC_{2}$ had 3 neurons -- 3 outputs and hence, $FC_{3}$ must have 3 inputs. $FC_{3}$ must produce 1 output only (since we assumed that this is a classification task) and hence, we notice that it must have 1 neuron only. It produces the following, assuming $w_{1}'', w_{2}'', w_{3}'', b''$ to be the weights and biases of this layer.
 
 $$
-{ L, \frac{\partial L}{\partial w1''}, \frac{\partial L}{\partial w2''}, \frac{\partial L}{\partial w3''}, \frac{\partial L}{\partial b''}, \frac{\partial L}{\partial x1''}, \frac{\partial L}{\partial x2''}, \frac{\partial L}{\partial x3''} }
+{ L, \frac{\partial L}{\partial w_{1}''}, \frac{\partial L}{\partial w_{2}''}, \frac{\partial L}{\partial w_{3}''}, \frac{\partial L}{\partial b''}, \frac{\partial L}{\partial x_{1}''}, \frac{\partial L}{\partial x_{2}''}, \frac{\partial L}{\partial x_{3}''} }
 $$
 
-Here, $x1''$, $x2''$, $x3''$ are the inputs to $FC_{3}$ or the outputs of $FC_{2}$.
+Here, $x_{1}''$, $x_{2}''$, $x_{3}''$ are the inputs to $FC_{3}$ or the outputs of $FC_{2}$ (i.e. $y1, y2, y3$).
 
 Now, we need to appropriately modify the gradients that each neuron produced by $FC_{1}$ and $FC_{2}$. We do so by the simple chain rule. This is where we see a limitation of this specific algorithm. Chain rule, in this context, is a representation of symbolic differentation. 
 
-We have $\frac{\partial L}{\partial x1'''}, \frac{\partial L}{\partial x2'''}, \frac{\partial L}{\partial x3'''}$ in hand. These are essentially $\frac{\partial L}{\partial y1}, \frac{\partial L}{\partial y2}, \frac{\partial L}{\partial y3}$. 
+We have $\frac{\partial L}{\partial x_{1}''}, \frac{\partial L}{\partial x_{2}''}, \frac{\partial L}{\partial x_{3}''}$ in hand. These are essentially $\frac{\partial L}{\partial y1}, \frac{\partial L}{\partial y2}, \frac{\partial L}{\partial y3}$. 
 
 
 We now use the chain rule to produce the following gradients:
 
 $$
-<\frac{\partial L}{\partial w1}, \frac{\partial L}{\partial w2}, \frac{\partial L}{\partial b1}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}, \frac{\partial L}{\partial w3}, \frac{\partial L}{\partial w4}, \frac{\partial L}{\partial b2}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}, \frac{\partial L}{\partial w5}, \frac{\partial L}{\partial w6}, \frac{\partial L}{\partial b3}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}>
+<\frac{\partial L}{\partial w_{1}}, \frac{\partial L}{\partial w_{2}}, \frac{\partial L}{\partial b_{1}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial w_{3}}, \frac{\partial L}{\partial w_{4}}, \frac{\partial L}{\partial b_{2}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial w_{5}}, \frac{\partial L}{\partial w_{6}}, \frac{\partial L}{\partial b_{3}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}>
 $$
 
 As a result, we've achieved the gradients for the weights and biases for each neuron in $FC_{2}$. We can now average (we explain why in the next paragraph) the input gradients from $FC_{2}$ to get the appropriate gradients for $FC_{1}$. This system proves that backpropagation by itself is a complex algorithm that needs to be finetuned for previous layers. Regardless, we have the following gradients left:
 
 $$
-<\frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}, \frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}>
+<\frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}>
 $$
 
 These are just duplicates from each neuron. Typically, in machine learning applications, gradients are aggregated by taking the mean -- however, there are multiple methods of aggregation; we will stick to averaging for now. As a result, we provide these gradients (in this case, 3 gradients) for previous layer's backprop.
@@ -1617,7 +1615,7 @@ Each neuron in an FC tends to produce a duplicate of the input gradients i.e. in
 ![](./images/diff-gradAvg.svg)
 
 $$
-\frac{\partial L}{\partial x1}, \frac{\partial L}{\partial x2}
+\frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}
 $$
 
 Three neurons do the above process. As stated in previous sections, machine learning engineers tend to aggregate these gradients by just averaging them out. We do the same -- but this process is hidden in the backpropagation environment.
