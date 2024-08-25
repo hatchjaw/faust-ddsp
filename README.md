@@ -1593,13 +1593,21 @@ Let's first define how to create a backpropagation environment. Our backpropagat
 b = df.backpropNN((1, 3, 3, 2, 2, 1));
 ```
 
-This is the backpropagation environment for the second example stated above. We define this environment by including the (number of neurons, number of inputs) from the last layer to the first layer. In this case, (1, 3) -> (3, 2) -> (2, 1).
+This is the backpropagation environment for the second example stated above. We define this environment by including the (number of neurons, number of inputs) from the last layer to the first layer. In this case, (1, 3) -> (3, 2) -> (2, 1). 
 
 To begin backpropagation itself, we ensure that it occurs in an end-to-end manner. With all signals as input, we use the following for backpropagation.
 
 ```faust
 b.start(b.N - 1)
 ```
+
+A demonstration of the backpropagation itself for a single FC can be seen here:
+
+![](./images/diff-backpropFC.svg)
+
+The internal workings of this involves using chain rules and routing mechanisms to appropriately route the gradients:
+
+![](./images/diff-chainRule.svg)
 
 This does backpropagation of the entire neural network -- but we internally do backpropagation layer by layer (i.e. FC by FC). It ignores the last layer, since the loss function automatically provides the gradients for backprop. The rest of the layers use this algorithm recursively.
 

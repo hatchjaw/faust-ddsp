@@ -1,9 +1,6 @@
 df = library("diff.lib");
 import("stdfaust.lib");
 
-N = 4; // no of inputs
-n = 2; // no of neurons
-
 process = si.bus(8) : backpropFC(1,2);
 
 backpropFC(N, n) = route((2*N+1)*n + n, (2*N+1)*n + n, par(i, n, (i+1, i+1+(2*N+1)*i), 
