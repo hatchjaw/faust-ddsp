@@ -1318,7 +1318,7 @@ $$
 G = \frac{y - \hat{y}}{|y - \hat{y}|} \cdot \frac{\partial y}{\partial x}
 $$
 
-where $y$ is your learnable output, while $\hat{y}$ is your ground truth output / target output.
+where $y$ is your predicted output signal, while $\hat{y}$ is your target signal.
 
 ###### L2 time-domain (MSE)
 
@@ -1405,10 +1405,10 @@ learnLinearFreq(windowSize, optimizer)
 ## Neural Networks
 The core component of neural networks is a neuron. We introduce the concept of a neuron in this library.
 
-We can see that the task of parameter estimation creates an instance of overfitting to a particular value. As a result, there is a need to create a more generalized model that can accurately predict / classify things in the audio-domain. The issue is the creation of a fully functioning ML model that can create accurate weights and biases to deal with tasks such as classification, regression and more. This can also be extended to more complex models such as the creation of generative models, such as autoencoders. 
+The task of parameter estimation can lead to overfitting to a specific value. As a result, there is a need to create a more generalized model that can accurately predict / classify things in the audio-domain. The issue is the creation of a fully functioning ML model that can create accurate weights and biases to deal with tasks such as classification, regression and more. This can also be extended to more complex models such as the creation of generative models, such as autoencoders. 
 
 ### A functioning neuron
-We introduce the concept of a single functioning neuron in example [single_neuron.dsp](./examples/experiments/single_neuron.dsp). This allows us to take a single hidden layer between the input and the output. This example serves to an classification example to illustrate how Faust can create non-linear neural structures. 
+We introduce the concept of a single functioning neuron in example [single_neuron.dsp](./examples/experiments/single_neuron.dsp). This allows us to take a single hidden layer between the input and the output. This is a classification example to illustrate how Faust can create non-linear neural structures. 
 
 The structure of a single neuron looks something like so: 
 
@@ -1418,7 +1418,7 @@ In Faust, this looks something like this, along with the backpropagation algorit
 
 ![](./images/example-neuron.svg)
 
-So, what exactly happens in a neuron? Say we use a sigmoid function as a non-linear activation function in this example.
+So, what exactly happens in a neuron? Assume we use a sigmoid function as a non-linear activation function in this example.
 The hidden layer calculates the following:
 
 $$
@@ -1441,7 +1441,7 @@ $$
 G_{i} = \frac{\partial L}{\partial w_{i}}
 $$
 
-We assume a symbolic approach to this chain rule. We explain why in later sections of this documentation. These gradients need to be further simplified for our usage via chain rule, although traditional autodiff does not simplify like this:
+We assume a symbolic approach to applying chain rule. We explain why in later sections of this documentation. These gradients need to be further simplified for our usage via chain rule, although traditional autodiff does not simplify like this:
 
 $$
 G_{i} = \frac{\partial L}{\partial w_{i}} = \frac{\partial L}{\partial y} \cdot \frac{\partial y}{\partial a_{1}} \cdot \frac{\partial a_{1}}{\partial w_{i}} \\
@@ -1459,12 +1459,12 @@ $$
 \frac{\partial a_{1}}{\partial w_{i}} = x_{i} \\
 $$
 
-This is pretty complex. Imagine the complexity for more deeper layers! You would have chains of chains of chains ... rules. As a result, there is a definite need for a generalization for such gradients.
+This is pretty complex. Imagine the complexity for more deeper layers! You would have chains of chains of chains ... rules. As a result, there is a definite need for to create generalized routing for such gradients.
 
 NB. This example is more indicative of a symbolic differentiation approach; but we will continue to talk about automatic differentiation throughout the next section.
 
 ## Faust Neural Network Blocks
-In Faust, we define neural network blocks as various types of layers (such as fully connected, convoluted, recurrent...) in ML. We, of course, use the basic concept of a neuron and attempt to create more generalized blocks (such as fully connected layers) that operate on the core concept of how backpropagation would exist in a language such as Faust.
+In Faust, neural network blocks are defined as different types of layers, such as fully connected, convolutional, and recurrent, commonly used in machine learning. We use the basic concept of a neuron and attempt to create more generalized blocks (such as fully connected layers) that operate on the core concept of how backpropagation would exist in a language such as Faust.
 
 At present, only forward mode automatic differentiation is implemented in a generalisable way in Faust. In forward mode, gradients are computed during N forward passes of the chain rule (where N is the number of input variables), then propagated back to the inputs.
 
@@ -1501,7 +1501,7 @@ Mathematically speaking, we can expect $2N+2$ signals as a output from an FCL, a
 
 #### Example: Two+ FCs
 
-Let's take a more complex example -- this example deals with the creation of a binary classifier (0 and 1 only). While this example focuses on binary classification, the underlying principles can be extended to regression tasks. For instance, a binary classifier could be adapted to predict whether an input waveform is sinusoidal or square (view the working of the same here -- [fc-3.dsp](./examples/experiments/fc-3.dsp)). This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a 3-layered FCL here. The first layer contains 2 neurons, the second layer contains 3 neuron and the final layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FCL to be $FC_{1}$, the second FCL to be $FC_{2}$ and the third FCL to be $FC_{3}$. The inputs for $FC_{1}$ are $x_{1}$ only. 
+Let's take a more complex example -- this example deals with the creation of a binary classifier (0 and 1 only). While this example focuses on binary classification, the underlying principles can be extended to regression tasks. For instance, a binary classifier could be adapted to predict whether an input waveform is sinusoidal or square (view the working of the same here -- [fc-3.dsp](./examples/experiments/fc-3.dsp)). This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a neural network composed of three FCLs here. The first layer contains 2 neurons, the second layer contains 3 neuron and the final layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FCL to be $FC_{1}$, the second FCL to be $FC_{2}$ and the third FCL to be $FC_{3}$. The inputs for $FC_{1}$ are $x_{1}$ only. 
 
 ![](./images/diff-threelayerfc.svg)
 
@@ -1513,7 +1513,7 @@ $$
 
 Now, since we have multiple neurons in this FC, we route all the outputs (i.e. $y$) to the top of the circuit and hence, we can appropriately use the outputs to act as the input to the next FC. Users need to note that since this layer has 2 neurons, it will have 2 outputs (1 from each). As a result, the next FC (i.e. $FC_{2}$) will need to take in 2 inputs.
 
-What are we missing here to make these gradients appropriate for backpropagation? We're missing $\frac{\partial L}{\partial y}$ for each neuron. Since each neuron outputs a $y$, we need a partial derivative of L with respect to y in order to obtain true gradients for backpropagation.
+What are we missing here to make these gradients appropriate for backpropagation? We're missing $\frac{\partial L}{\partial y}$ for each neuron. Since each neuron outputs a $y$, we need a partial derivative of L with respect to y in order to obtain the correct gradients for backpropagation.
 
 Let's move on to the second FCL $FC_{2}$. The outputs of $FC_{1}$ i.e. $y1, y2$ are now the inputs to this connected layer. What now? The same operation occurs and we attempt to produce the gradients (via end-to-end autodiff). Assume the inputs to this $FC_{2}$ to be now $x_{1}', x_{2}'$ instead of $y1, y2$. This $FC_{2}$ finally produces the following, assuming $w_{1}', w_{2}', b' ...$ to be the weights and biases of this layer (3 $y$ due to 3 neurons):
 
@@ -1549,20 +1549,20 @@ $$
 These are just duplicates from each neuron. Typically, in machine learning applications, gradients are aggregated by taking the mean -- however, there are multiple methods of aggregation; we will stick to averaging for now. As a result, we provide these gradients (in this case, 3 gradients) for previous layer's backprop.
 
 #### Limitations of the backpropagation approach
-As stated above, we need input gradients from a layer to be fed into the backpropagation algorithm for a previous layer. This is to ensure that we obtain appropriate gradients for backprop. In this context, appropriate gradients mean the derivative of $L$ with respect to all parameters of that neuron. 
+As stated above, we need input gradients from a layer to be fed into the backpropagation algorithm for a previous layer. This is to ensure that we obtain appropriate gradients for backprop. Appropriate gradients, in this context, also means the derivative of $L$ with respect to all parameters of that neuron. 
 
 Obviously, to do this, we implement the chain rule algorithm, by symbolically completing application of the chain rule as a
 final step. This is a major limitation we noticed during development.
 
 #### FCL Algorithm
-This library is specifically developed for the sake of generalization. Users must note the following while using this library:
+This library is specifically designed for building generalized neural networks. Users must note the following while using this library:
 - Be aware of the number of weights / biases that must enter a FC.
 - Note how to create the backpropagation environment.
 
 As a result, we define the following functions:
 
 ##### Forward Pass
-The forward pass includes the conversion of a neuron's parameter $w$, $b$ and $x$ to $y$ via an activation function. This is done via an FC. This FC is just a compilation of multiple neurons.
+The forward pass includes the conversion of a neuron's parameter $w$, $b$ and $x$ to $y$ via an activation function. This is done via the FC. This FC is just a collection of multiple neurons.
 
 ```faust
 df.fc(N, n, activationFn, learning_rate)
@@ -1604,11 +1604,11 @@ A demonstration of the backpropagation itself for a single FC can be seen here:
 
 ![](./images/diff-backpropFC.svg)
 
-The internal workings of this involves using chain rules and routing mechanisms to appropriately route the gradients:
+The internal workings of this involves using chain rule and routing mechanisms to appropriately route the gradients:
 
 ![](./images/diff-chainRule.svg)
 
-This does backpropagation of the entire neural network -- but we internally do backpropagation layer by layer (i.e. FC by FC). It ignores the last layer, since the loss function automatically provides the gradients for backprop. The rest of the layers use this algorithm recursively.
+This does backpropagation of the entire neural network -- but we internally do backpropagation layer by layer (i.e. FC by FC). It ignores the last layer, since the loss function automatically provides the correct gradients for backprop. The rest of the layers use this algorithm recursively.
 
 #### Gradient Averaging 
 Each neuron in an FC tends to produce a duplicate of the input gradients i.e. in this figure, each neuron produces input gradients (apart from the other 3 gradients):
@@ -1635,6 +1635,9 @@ This segment of code is extremely generalized and you may add more layers / more
 #### Final tips for creation of a neural network
 - You must know that while defining a neural network, you must use `par(i, b.next_signals(N), _)` to allow the gradients from all previous layers to pass through the current FC layer. $N$ in this context refers to the number of previous FC layers that were defined. Refer to the example for more understanding.
 - Note the number of weights and biases each FC should take in. The recursion should be crafted appropriately.
+
+### Bridging to a realistic example
+Using [fc-3.dsp](./examples/experiments/fc-3.dsp) as inspiration, we believe this example could serve as a foundation for generating a realistic dataset in another language, such as C++, and subsequently creating a functional neural network by integrating C++ with Faust. Additionally, this could be a stepping stone towards obtaining weights and biases and storing them in a file for offline inference.
 
 ## Roadmap
 - Automatic parameter normalisation...
