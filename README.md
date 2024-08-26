@@ -43,17 +43,17 @@ DDSP experiments in Faust.
     - [Parameter Estimation](#parameter-estimation)
       - [Backpropagation circuit](#backpropagation-circuit)
     - [Core Machine Learning (ML) Circuits](#core-machine-learning-ml-circuits)
+      - [Learning Rate Scheduler](#learning-rate-scheduler)
+      - [Optimizers](#optimizers)
+        - [SGD Optimizer](#sgd-optimizer)
+        - [Adam Optimizer](#adam-optimizer)
+        - [RMSProp Optimizer](#rmsprop-optimizer)
       - [Loss Functions](#loss-functions)
         - [MAE Function (Time-Domain)](#l1-time-domain-mae)
         - [MSE Function (Time-Domain)](#l2-time-domain-mse)
         - [MSLE Function (Time-Domain)](#msle-time-domain)
         - [Huber Function (Time-Domain)](#huber-time-domain)
         - [Linear Function (Frequency-Domain)](#linear-frequency-domain)
-      - [Learning Rate Scheduler](#learning-rate-scheduler)
-      - [Optimizers](#optimizers)
-        - [SGD Optimizer](#sgd-optimizer)
-        - [Adam Optimizer](#adam-optimizer)
-        - [RMSProp Optimizer](#rmsprop-optimizer)
   - [Neural Networks](#neural-networks)
     - [A functioning neuron](#a-functioning-neuron)
   - [Faust Neural Network Blocks](#faust-neural-network-blocks)
@@ -1229,6 +1229,68 @@ df = library("diff.lib");
 process = df.backprop(groundTruth, learnable, lossFunction);
 ```
 #### Core Machine Learning (ML) Circuits
+##### Optimizers
+Optimizers are algorithms or methods used in ML to adjust the learning rate / gradients of a model in order to minimize the loss function. 
+
+###### Momentum-based optimizers
+One can easily introduce the concept of momentum into their optimizer by simply modifying their variables in the diff environment to the following:
+
+```faust
+df = library("diff.lib");
+vars = df.vars((x1,x2))
+with {
+    x1 = _ : +~(_ : *(momentum)) : -~_ <: attach(hbargraph("x1",0,1));
+    x2 = _ : +~(_ : *(momentum)) : -~_<: attach(hbargraph("x2",0,1));
+    momentum = 0.9;
+};
+```
+
+We suggest the use of this only when using SGD as the optimizer.
+
+###### SGD Optimizer
+This is a regular stochastic gradient descent optimizer which does not account for an adaptive learning rate. This performs pure gradient descent.
+
+```faust
+optimizers.SGD(learningRate)
+```
+
+###### Adam Optimizer
+This is an optimizer, implemented as per the original Adam paper[^6].
+
+```faust
+optimizers.Adam(learningRate, beta1, beta2)
+```
+
+We recommend beta1 and beta2 to be 0.9 and 0.999; similar to Kera's recommendations.
+
+###### RMSProp Optimizer
+This is an optimizer, implemented as per the original RMSProp presentation[^7].
+
+```faust
+optimizers.RMSProp(learningRate, rho)
+```
+We recommend rho to be 0.9; similar to Kera's recommendations.
+
+An implementation of any of the above optimizers can be seen below:
+
+```faust
+df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizers.SGD(1e-3)))
+```
+
+[^6]: https://arxiv.org/abs/1412.6980
+[^7]: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
+
+
+##### Learning Rate Scheduler
+This scheduler decays the learnable rate by $exp(delta)$ every $epoch$ iterations.
+
+- Input: learning_rate, epoch, delta
+- Output: resulting learning_rate
+
+```faust
+learning_rate : learning_rate_scheduler(epoch, delta)
+```
+
 ##### Loss Functions
 
 This loss function accepts a `windowSize` parameter that allows Faust to record the (ba.)slidingMean of the last `windowSize` inputs to the loss function. This allows the input to be averaged over a small period of time and avoid random spikes of inputs or inconsistencies in signals. This loss function also calculates the loss as well the gradients to guide the `learnable` parameter to the required `truth` parameter.
@@ -1339,67 +1401,6 @@ NB. This loss function converges to the global minimum for the range $[140, 1350
 ```faust
 learnLinearFreq(windowSize, optimizer)
 ```
-
-##### Learning Rate Scheduler
-This scheduler decays the learnable rate by $exp(delta)$ every $epoch$ iterations.
-
-- Input: learning_rate, epoch, delta
-- Output: resulting learning_rate
-
-```faust
-learning_rate : learning_rate_scheduler(epoch, delta)
-```
-
-##### Optimizers
-Optimizers are algorithms or methods used in ML to adjust the learning rate / gradients of a model in order to minimize the loss function. 
-
-###### Momentum-based optimizers
-One can easily introduce the concept of momentum into their optimizer by simply modifying their variables in the diff environment to the following:
-
-```faust
-df = library("diff.lib");
-vars = df.vars((x1,x2))
-with {
-    x1 = _ : +~(_ : *(momentum)) : -~_ <: attach(hbargraph("x1",0,1));
-    x2 = _ : +~(_ : *(momentum)) : -~_<: attach(hbargraph("x2",0,1));
-    momentum = 0.9;
-};
-```
-
-We suggest the use of this only when using SGD as the optimizer.
-
-###### SGD Optimizer
-This is a regular stochastic gradient descent optimizer which does not account for an adaptive learning rate. This performs pure gradient descent.
-
-```faust
-optimizers.SGD(learningRate)
-```
-
-###### Adam Optimizer
-This is an optimizer, implemented as per the original Adam paper[^6].
-
-```faust
-optimizers.Adam(learningRate, beta1, beta2)
-```
-
-We recommend beta1 and beta2 to be 0.9 and 0.999; similar to Kera's recommendations.
-
-###### RMSProp Optimizer
-This is an optimizer, implemented as per the original RMSProp presentation[^7].
-
-```faust
-optimizers.RMSProp(learningRate, rho)
-```
-We recommend rho to be 0.9; similar to Kera's recommendations.
-
-An implementation of any of the above optimizers can be seen below:
-
-```faust
-df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizers.SGD(1e-3)))
-```
-
-[^6]: https://arxiv.org/abs/1412.6980
-[^7]: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
 
 ## Neural Networks
 The core component of neural networks is a neuron. We introduce the concept of a neuron in this library.
