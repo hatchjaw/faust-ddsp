@@ -1536,13 +1536,13 @@ We have $\frac{\partial L}{\partial x_{1}''}, \frac{\partial L}{\partial x_{2}''
 We now use the chain rule to produce the following gradients:
 
 $$
-<\frac{\partial L}{\partial w_{1}}, \frac{\partial L}{\partial w_{2}}, \frac{\partial L}{\partial b_{1}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial w_{3}}, \frac{\partial L}{\partial w_{4}}, \frac{\partial L}{\partial b_{2}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial w_{5}}, \frac{\partial L}{\partial w_{6}}, \frac{\partial L}{\partial b_{3}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}>
+{ \frac{\partial L}{\partial w_{1}'}, \frac{\partial L}{\partial w_{2}'}, \frac{\partial L}{\partial b'}, \frac{\partial L}{\partial x_{1}'}, \frac{\partial L}{\partial x_{2}'}, ... } 
 $$
 
 As a result, we've achieved the gradients for the weights and biases for each neuron in $FC_{2}$. We can now average (we explain why in the next paragraph) the input gradients from $FC_{2}$ to get the appropriate gradients for $FC_{1}$. This system proves that backpropagation by itself is a complex algorithm that needs to be finetuned for previous layers. Regardless, we have the following gradients left:
 
 $$
-<\frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}>
+{ \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}} }
 $$
 
 These are just duplicates from each neuron. Typically, in machine learning applications, gradients are aggregated by taking the mean -- however, there are multiple methods of aggregation; we will stick to averaging for now. As a result, we provide these gradients (in this case, 3 gradients) for previous layer's backprop.
