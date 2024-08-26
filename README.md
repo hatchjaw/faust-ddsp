@@ -68,7 +68,7 @@ DDSP experiments in Faust.
           - [Gradient Averaging](#gradient-averaging)
         - [A Generalized Example](#a-generalized-example)
       - [Tips for setting up a neural network](#final-tips-for-creation-of-a-neural-network)
-
+    - [Bridging to a realistic example](#bridging-to-a-realistic-example)
 - [Roadmap](#roadmap)
 
 ## What is DDSP?
