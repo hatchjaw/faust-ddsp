@@ -45,8 +45,9 @@ with {
     learnable = learnableLPF
     with {
         dd = d.diff;
+        input = d.input;
 
-        learnableLPF = d.input,(si.bus(vars.N) <: si.bus(vars.N*2))
+        learnableLPF = input,(si.bus(vars.N) <: si.bus(vars.N*2))
             : (dd(_),si.bus(vars.N) <: (dd(_),b0 : dd(*)),(dd(mem),b1 : dd(*))),_
             : dd(+),_
             : route(3,4,(1,3),(2,4),(3,1),(3,2))

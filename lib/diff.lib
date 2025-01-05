@@ -68,6 +68,17 @@ with {
 //==============================================================================
 
 env(vars) = environment {
+    // Forward mode automatic differentiation.
+    fwdAD(C) = par(i, inputs(C), input) : fwd(C)
+    with {
+        fwd(A ~ B) = fwd(A) ~ fwd(B);
+        fwd(A :> B) = fwd(A) : sumall(outputs(A)) : fwd(B);
+        fwd(A <: B) = fwd(A) <: fwd(B);
+        fwd((A,B)) = fwd(A),fwd(B);
+        fwd(A : B) = fwd(A) : fwd(B);
+        fwd(A) = diff(A);
+    };
+
     //=====================Differentiable primitives============================
     //
     //==========================================================================
