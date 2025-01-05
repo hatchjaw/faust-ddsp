@@ -20,16 +20,55 @@ DDSP experiments in Faust.
     - [`sin` Primitive](#sin-primitive)
     - [`cos` Primitive](#cos-primitive)
     - [`tan` Primitive](#tan-primitive)
+    - [`asin` Primitive](#asin-primitive)
+    - [`acos` Primitive](#acos-primitive)
+    - [`atan` Primitive](#atan-primitive)
+    - [`atan2` Primitive](#atan2-primitive)
+    - [`exp` Primitive](#exp-primitive)
+    - [`log` Primitive](#log-primitive)
+    - [`log10` Primitive](#log10-primitive)
+    - [`sqrt` Primitive](#sqrt-primitive)
+    - [`abs` Primitive](#abs-primitive)
+    - [`min` Primitive](#min-primitive)
+    - [`max` Primitive](#max-primitive)
+    - [`floor` Primitive](#floor-primitive)
+    - [`ceil` Primitive](#ceil-primitive)
   - [Helper Functions](#helper-functions)
     - [Input Primitive](#input-primitive)
     - [Differentiable Recursion](#differentiable-recursive-composition)
     - [Differentiable Phasor](#differentiable-phasor)
     - [Differentiable Oscillator](#differentiable-oscillator)
     - [Differentiable `sum` iteration](#differentiable-sum-iteration)
-    - [Backpropagation Circuit](#backpropagation-circuit)
-  - [Loss Functions](#loss-functions)
-    - [L1 time-domain](#l1-time-domain)
-    - [L2 time-domain](#l2-time-domain)
+  - [Machine Learning](#machine-learning)
+    - [Parameter Estimation](#parameter-estimation)
+      - [Backpropagation circuit](#backpropagation-circuit)
+    - [Core Machine Learning (ML) Circuits](#core-machine-learning-ml-circuits)
+      - [Learning Rate Scheduler](#learning-rate-scheduler)
+      - [Optimizers](#optimizers)
+        - [SGD Optimizer](#sgd-optimizer)
+        - [Adam Optimizer](#adam-optimizer)
+        - [RMSProp Optimizer](#rmsprop-optimizer)
+      - [Loss Functions](#loss-functions)
+        - [MAE Function (Time-Domain)](#l1-time-domain-mae)
+        - [MSE Function (Time-Domain)](#l2-time-domain-mse)
+        - [MSLE Function (Time-Domain)](#msle-time-domain)
+        - [Huber Function (Time-Domain)](#huber-time-domain)
+        - [Linear Function (Frequency-Domain)](#linear-frequency-domain)
+  - [Neural Networks](#neural-networks)
+    - [A functioning neuron](#a-functioning-neuron)
+  - [Faust Neural Network Blocks](#faust-neural-network-blocks)
+    - [Fully Connected Layer](#fully-connected-fc-block)
+      - [Example: One FC](#example-one-fc)
+      - [Example: Two+ FCs](#example-two-fcs)
+      - [Limitations in Backpropagation Algorithm](#limitation-in-backpropagation-approach)
+      - [FCL Algorithm](#fcl-algorithm)
+        - [Forward Pass](#forward-pass)
+        - [Activation Functions \& Loss](#activation-functions-and-loss)
+        - [Backpropagation](#backpropagation)
+          - [Gradient Averaging](#gradient-averaging)
+        - [A Generalized Example](#a-generalized-example)
+      - [Tips for setting up a neural network](#final-tips-for-creation-of-a-neural-network)
+    - [Bridging to a realistic example](#bridging-to-a-realistic-example)
 - [Roadmap](#roadmap)
 
 ## What is DDSP?
@@ -463,7 +502,7 @@ Begin by defining parameters with `df.vars` and then call `df.env`, passing
 in the parameters as an argument, e.g.:
 
 ```faust
-df = library("diff.lib")
+df = library("diff.lib");
 ...
 vars = df.vars((x1,x2))
 with {
@@ -556,6 +595,23 @@ process = d.diff(_);
 ```
 
 ![](./images/diffwire.svg)
+
+#### Cut Primitive
+
+```faust
+diff(!)
+```
+
+$$
+\langle u,u' \rangle = \langle \rangle
+$$
+
+- Input: one dual signal
+- Output: None (no signals returned)
+
+```faust
+process = d.diff(!), _;
+```
 
 #### Add Primitive
 
@@ -801,6 +857,293 @@ process = d.diff(tan);
 
 ![](./images/difftan.svg)
 
+#### `asin` Primitive
+
+```faust
+diff(asin)
+```
+
+$$
+\arcsin(\langle u, u'\rangle) = \langle\arcsin(u), \frac{u'}{\sqrt{1-u^2}}\rangle
+$$
+
+- Input: one dual signal
+- Output: one dual signal consisting of the arcsine of the input and `vars.N`
+  partial derivatives
+
+NB. To prevent division by zero in the partial derivatives, `diff(asin,vars.N)`
+uses whichever is the largest of $\sqrt{1-u^2}$ and $1\times10^{-10}$.
+
+```faust
+process = d.diff(asin);
+```
+
+![](./images/diffasin.svg)
+
+#### `acos` Primitive
+
+```faust
+diff(acos)
+```
+
+$$
+\arccos(\langle u, u'\rangle) = \langle\arccos(u), -\frac{u'}{\sqrt{1-u^2}}\rangle
+$$
+
+- Input: one dual signal
+- Output: one dual signal consisting of the arccosine of the input and `vars.N`
+  partial derivatives
+
+NB. To prevent division by zero in the partial derivatives, `diff(acos,vars.N)`
+uses whichever is the largest of $\sqrt{1-u^2}$ and $1\times10^{-10}$.
+
+```faust
+process = d.diff(acos);
+```
+
+![](./images/diffacos.svg)
+
+#### `atan` Primitive
+
+```faust
+diff(atan)
+```
+
+$$
+\arctan(\langle u, u'\rangle) = \langle\arctan(u), \frac{u'}{\sqrt{1+u^2}}\rangle
+$$
+
+- Input: one dual signal
+- Output: one dual signal consisting of the arctan of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(atan);
+```
+
+![](./images/diffatan.svg)
+
+#### `atan2` Primitive
+
+```faust
+diff(atan2)
+```
+
+$$
+\arctan2(\langle u, u'\rangle, \langle v, v' \rangle) = \langle\arctan2(u, v), \frac{u'v+v'u}{\sqrt{u^2+v^2}}\rangle
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the arctan2 of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(atan2);
+```
+
+![](./images/diffatan2.svg)
+
+#### `exp` Primitive
+
+```faust
+diff(exp)
+```
+
+$$
+\exp(\langle u, u'\rangle) = \langle\exp(u), u'*\exp(u)\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the exp of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(exp);
+```
+
+![](./images/diffexp.svg)
+
+#### `log` Primitive
+
+```faust
+diff(log)
+```
+
+$$
+\log(\langle u, u'\rangle) = \langle\log(u), \frac{u'}{u}\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the log of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(log);
+```
+
+![](./images/difflog.svg)
+
+#### `log10` Primitive
+
+```faust
+diff(log10)
+```
+
+$$
+\log_{10}(\langle u, u'\rangle) = \langle\log_{10}(u), \frac{u'}{u\log_{10}(u)}\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the $log_{10}$ of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(log10);
+```
+
+![](./images/difflog10.svg)
+
+#### `sqrt` Primitive
+
+```faust
+diff(sqrt)
+```
+
+$$
+\sqrt(\langle u, u'\rangle) = \langle\sqrt(u), \frac{u'}{2*\sqrt(u)}\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the sqrt of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(sqrt);
+```
+
+![](./images/diffsqrt.svg)
+
+#### `abs` Primitive
+
+```faust
+diff(abs)
+```
+
+$$
+|(\langle u, u'\rangle)| = \langle|u|, u'*\frac{u}{|u|}\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the abs of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(abs);
+```
+
+![](./images/diffabs.svg)
+
+#### `min` Primitive
+
+```faust
+diff(min)
+```
+
+$$
+\min(\langle u, u' \rangle, \langle v, v' \rangle) = \left\langle \min(u, v), d \right\rangle \\
+\text{where} \\
+d =
+\begin{cases}
+u' & \text{if } u < v \\
+v' & \text{if } u \geq v
+\end{cases}
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the min of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(min);
+```
+
+![](./images/diffmin.svg)
+
+#### `max` Primitive
+
+```faust
+diff(max)
+```
+
+$$
+\max(\langle u, u' \rangle, \langle v, v' \rangle) = \left\langle \max(u, v), d \right\rangle \\
+\text{where} \\
+d =
+\begin{cases}
+u' & \text{if } u \geq v \\
+v' & \text{if } u < v
+\end{cases}
+$$
+
+- Input: two dual signals
+- Output: one dual signal consisting of the max of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(max);
+```
+
+![](./images/diffmax.svg)
+
+#### `floor` Primitive
+
+```faust
+diff(floor)
+```
+
+$$
+\lfloor(\langle u, u'\rangle)\rfloor = \langle\lfloor u \rfloor, u'\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the floor of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(floor);
+```
+
+![](./images/difffloor.svg)
+
+#### `ceil` Primitive
+
+```faust
+diff(ceil)
+```
+
+$$
+\lceil(\langle u, u'\rangle)\rceil = \langle\lceil u \rceil, u'\rangle
+$$
+
+- Input: one dual signals
+- Output: one dual signal consisting of the floor of the input and `vars.N`
+  partial derivatives
+
+```faust
+process = d.diff(ceil);
+```
+
+![](./images/diffceil.svg)
+
+**Remainder of the primitives are defined as the following:**
+
+$$
+f(\langle u, u' \rangle) = \langle f(u), 0 \rangle
+$$
+
+This is due to the fact that these primitives (especially bitwise primitives and such) are not well-defined in autodiff. The developers should be
+aware that the current system assumes that certain discontinuous functions' derivatives are 0, which may not be appropriate in all cases.
+
 ### Helper Functions
 
 #### Input Primitive
@@ -864,12 +1207,15 @@ osc(f0)
 ```
 
 #### Differentiable `sum` iteration
+A utility function used to iterate `N` times through a summation of dual signals.
 
 ```faust
 sumall(N)
 ```
-
-#### Backpropagation circuit
+### Machine Learning
+#### Parameter Estimation 
+##### Backpropagation circuit
+This backpropagation circuit is exclusively for _parameter estimation_ and it functions via the creation of gradients and a loss function in order to guide the `learnable` parameter to the `groundTruth`. The available loss functions can be found below.
 
 ```faust
 backprop(groundTruth, learnable, lossFunction)
@@ -882,26 +1228,420 @@ df = library("diff.lib");
 ...
 process = df.backprop(groundTruth, learnable, lossFunction);
 ```
+#### Core Machine Learning (ML) Circuits
+##### Optimizers
+Optimizers are algorithms or methods used in ML to adjust the learning rate / gradients of a model in order to minimize the loss function. 
 
-### Loss Functions
-
-#### L1 time-domain
-
-```faust
-learnL1(windowSize, learningRate)
-```
-
-#### L2 time-domain
+###### Momentum-based optimizers
+One can easily introduce the concept of momentum into their optimizer by simply modifying their variables in the diff environment to the following:
 
 ```faust
-learnL2(windowSize, learningRate)
+df = library("diff.lib");
+vars = df.vars((x1,x2))
+with {
+    x1 = _ : +~(_ : *(momentum)) : -~_ <: attach(hbargraph("x1",0,1));
+    x2 = _ : +~(_ : *(momentum)) : -~_<: attach(hbargraph("x2",0,1));
+    momentum = 0.9;
+};
 ```
+
+We suggest the use of this only when using SGD as the optimizer.
+
+###### SGD Optimizer
+This is a regular stochastic gradient descent optimizer which does not account for an adaptive learning rate. This performs pure gradient descent.
+
+```faust
+optimizers.SGD(learningRate)
+```
+
+###### Adam Optimizer
+This is an optimizer, implemented as per the original Adam paper[^6].
+
+```faust
+optimizers.Adam(learningRate, beta1, beta2)
+```
+
+We recommend beta1 and beta2 to be 0.9 and 0.999; similar to Kera's recommendations.
+
+###### RMSProp Optimizer
+This is an optimizer, implemented as per the original RMSProp presentation[^7].
+
+```faust
+optimizers.RMSProp(learningRate, rho)
+```
+We recommend rho to be 0.9; similar to Kera's recommendations.
+
+An implementation of any of the above optimizers can be seen below:
+
+```faust
+df.backprop(truth,learnable,d.learnMAE(1<<5,d.optimizers.SGD(1e-3)))
+```
+
+[^6]: https://arxiv.org/abs/1412.6980
+[^7]: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
+
+
+##### Learning Rate Scheduler
+This scheduler decays the learnable rate by $exp(delta)$ every $epoch$ iterations.
+
+- Input: learning_rate, epoch, delta
+- Output: resulting learning_rate
+
+```faust
+learning_rate : learning_rate_scheduler(epoch, delta)
+```
+
+##### Loss Functions
+
+This loss function accepts a `windowSize` parameter that allows Faust to record the (ba.)slidingMean of the last `windowSize` inputs to the loss function. This allows the input to be averaged over a small period of time and avoid random spikes of inputs or inconsistencies in signals. This loss function also calculates the loss as well the gradients to guide the `learnable` parameter to the required `truth` parameter.
+
+Furthermore, `optimizer` can be substituted with a scheduler as listed below. 
+
+###### L1 time-domain (MAE)
+
+```faust
+learnMAE(windowSize, optimizer)
+```
+
+- Input: windowSize, optimizer
+- Output: loss, a gradient per parameter defined in the environment
+
+Mathematically, this loss function is defined as:
+
+$$
+L = |y - \hat{y}|
+$$
+
+while gradients are defined as:
+
+$$
+G = \frac{y - \hat{y}}{|y - \hat{y}|} \cdot \frac{\partial y}{\partial x}
+$$
+
+where $y$ is your predicted output signal, while $\hat{y}$ is your target signal.
+
+###### L2 time-domain (MSE)
+
+```faust
+learnMSE(windowSize, optimizer)
+```
+
+- Input: windowSize, optimizer
+- Output: loss, a gradient per parameter defined in the environment
+
+Mathematically, this loss function is defined as:
+
+$$
+L = (y - \hat{y})^2
+$$
+while, gradients are defined in autodiff as:
+$$
+G = 2 \cdot (y - \hat{y}) \cdot \frac{\partial y}{\partial x}
+$$
+
+where $y$ is your predicted output signal, while $\hat{y}$ is your target signal.
+
+###### MSLE time-domain
+
+```faust
+learnMSLE(windowSize, optimizer)
+```
+
+- Input: windowSize, optimizer
+- Output: loss, a gradient per parameter defined in the environment
+
+Mathematically, this loss function is defined as:
+
+$$
+L = (\log(y + 1) - \log(\hat{y} + 1))^2
+$$
+
+while, gradients are defined in autodiff as:
+
+$$
+G = 2 \cdot \frac{\log(y + 1) - \log(\hat{y} + 1)}{y + 1} \cdot \frac{\partial y}{\partial x}
+$$
+
+where $y$ is your predicted output signal, while $\hat{y}$ is your target signal.
+
+###### Huber time-domain
+
+```faust
+learnHuber(windowSize, optimizer, delta)
+```
+
+- Input: windowSize, optimizer, delta
+- Output: loss, a gradient per parameter defined in the environment
+
+Mathematically, this loss function is defined as:
+
+$$
+L_\delta(y, \hat{y}) = 
+\begin{cases} 
+\frac{1}{2}(y - \hat{y})^2 & \text{for } |y - \hat{y}| \le \delta, \\ 
+\delta \cdot \left(|y - \hat{y}| - \frac{1}{2}\delta\right) & \text{otherwise.}
+\end{cases}
+$$
+
+while, gradients are defined in autodiff as:
+
+$$
+G_\delta(y, \hat{y}) = 
+\begin{cases} 
+(y - \hat{y})^2 \cdot \frac{\partial y}{\partial x} & \text{for } |y - \hat{y}| \le \delta, \\ 
+\delta \cdot \left(\frac{y - \hat{y}}{|y - \hat{y}|}\right) \cdot \frac{\partial y}{\partial x} & \text{otherwise.}
+\end{cases}
+$$
+
+where $y$ is your predicted output signal, while $\hat{y}$ is your target signal; a suggested $\delta$ is 1.0.
+
+###### Linear frequency-domain
+NB. This loss function converges to the global minimum for the range $[140, 1350]$ Hz. This was tested with `os.osc` and `os.square` waveform. A recurring issue one can notice is that the loss landscape is so varied that it fails to learn outside this range and gets stuck at local minima. A possible solution to this issue is to introduce a better optimizer (rather than SGD), or a learning rate scheduler to solve such an issue. We report that RMSProp seems to break out of the minimum at some threshold and it seems to train well until another minimum. As a result, we suspect that the loss landscape is a series of plateaus and hence, a suitable learning rate scheduler (such as, an oscillating learning rate) and a good optimizer is required to solve this problem.
+
+```faust
+learnLinearFreq(windowSize, optimizer)
+```
+
+## Neural Networks
+The core component of neural networks is a neuron. We introduce the concept of a neuron in this library.
+
+The task of parameter estimation can lead to overfitting to a specific value. As a result, there is a need to create a more generalized model that can accurately predict / classify things in the audio-domain. The issue is the creation of a fully functioning ML model that can create accurate weights and biases to deal with tasks such as classification, regression and more. This can also be extended to more complex models such as the creation of generative models, such as autoencoders. 
+
+### A functioning neuron
+We introduce the concept of a single functioning neuron in example [single_neuron.dsp](./examples/experiments/single_neuron.dsp). This allows us to take a single hidden layer between the input and the output. This is a classification example to illustrate how Faust can create non-linear neural structures. 
+
+The structure of a single neuron looks something like so: 
+
+![](./images/single_neuron.svg)
+
+In Faust, this looks something like this, along with the backpropagation algorithm:
+
+![](./images/example-neuron.svg)
+
+So, what exactly happens in a neuron? Assume we use a sigmoid function as a non-linear activation function in this example.
+The hidden layer calculates the following:
+
+$$
+a_{1} = w1 \cdot x1 
+$$
+
+$$
+y = \sigma(a_{1})
+$$
+
+This example utilizes the MAE / L1-norm loss function. The loss is represented as:
+
+$$
+L = |y - \hat{y}|
+$$
+
+This seems simple enough, but for defining the gradients, we need to define:
+
+$$
+G_{i} = \frac{\partial L}{\partial w_{i}}
+$$
+
+We assume a symbolic approach to applying chain rule. We explain why in later sections of this documentation. These gradients need to be further simplified for our usage via chain rule, although traditional autodiff does not simplify like this:
+
+$$
+G_{i} = \frac{\partial L}{\partial w_{i}} = \frac{\partial L}{\partial y} \cdot \frac{\partial y}{\partial a_{1}} \cdot \frac{\partial a_{1}}{\partial w_{i}} \\
+$$
+
+$$
+\frac{\partial L}{\partial y} = \frac{y - \hat{y}}{|y - \hat{y}|} \\
+$$
+
+$$
+\frac{\partial y}{\partial a_{1}} = \frac{\partial (\sigma(a_{1}))}{\partial a_{1}} = \sigma(a_{1}) \cdot (1 - \sigma(a_{1})) \\
+$$
+
+$$ 
+\frac{\partial a_{1}}{\partial w_{i}} = x_{i} \\
+$$
+
+This is pretty complex. Imagine the complexity for more deeper layers! You would have chains of chains of chains ... rules. As a result, there is a definite need for to create generalized routing for such gradients.
+
+NB. This example is more indicative of a symbolic differentiation approach; but we will continue to talk about automatic differentiation throughout the next section.
+
+## Faust Neural Network Blocks
+In Faust, neural network blocks are defined as different types of layers, such as fully connected, convolutional, and recurrent, commonly used in machine learning. We use the basic concept of a neuron and attempt to create more generalized blocks (such as fully connected layers) that operate on the core concept of how backpropagation would exist in a language such as Faust.
+
+At present, only forward mode automatic differentiation is implemented in a generalisable way in Faust. In forward mode, gradients are computed during N forward passes of the chain rule (where N is the number of input variables), then propagated back to the inputs.
+
+### Fully Connected (FC) Layer
+A fully connected layer, also known as a dense layer, is a fundamental component of neural networks where each neuron is connected to every neuron in the previous and subsequent layers. This layer is responsible for learning complex representations of data by performing a weighted sum of inputs, followed by the application of an activation function.
+
+#### Example: One FC
+Let's begin with the math involved with the forward-pass and the backward-pass in a fully connected layer (FCL). Let's first begin with a simple example of an output FC, consisting of one neuron only.
+
+![](./images/diff-singlefc.svg)
+
+This example involves 7 signals passing through the neuron (3 weights, 1 bias, 3 inputs). We will denote weights as $w$, biases as $b$ and inputs as $x$.
+
+In this example, let us assume the incoming signals to be $w_{1}, w_{2}, w_{3}, b, x_{1}, x_{2}, x_{3}$. The neuron appropriately routes these parameters for backpropagation. As stated earlier, gradients are applied here:
+
+```faust
+weights(n, learningRate) = par(i, n, _ : *(learningRate) : -~_ <: attach(hbargraph("weight%i", -1, 1)));
+bias(learningRate) = _ : *(learningRate) : -~_ <: attach(hbargraph("bias", -1, 1));
+```
+
+We actively allow for the calculation of the $a_{1}$ as stated in [a functioning neuron](#a-functioning-neuron), and further calculate $y$ via an appropriate activation function (via autodiff). 
+
+Since this example exhibits only one fully connected layer (FCL), this means that the one FCL acts as the output layer. As a result, the output from the FCL must be fed to the loss function to calculate the losses and its derivatives. At the moment, the loss functions are implemented strictly for the purpose of classification with respect to a particular value. This can be extended to regression to a particular extent, which has not been experimented yet. 
+
+Since we deal with an output FCL only, we would need to calculate the losses which is done via the L1 loss function. The loss function continues autodiff and hence, produces a list of derivatives of $L$ with respect to the parameters stated above. We will cover the implementation of these loss functions in the next section.
+
+Using the loss function (and autodiff), we produce the following from the FCL:
+
+$$
+{ L, \frac{\partial L}{\partial w_{1}}, \frac{\partial L}{\partial w_{2}}, \frac{\partial L}{\partial w_{3}}, \frac{\partial L}{\partial b}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial x_{3}} }
+$$
+
+Mathematically speaking, we can expect $2N+2$ signals as a output from an FCL, assuming $N$ inputs. Since this example is pretty simple, we can simply backpropagate the gradients of $w_{1}, w_{2}, w_{3}, b$ with respect to L to the FCL. Note that users using this library must know the number of weights and biases a single FC takes in. We'll cover this in the next few sections.
+
+#### Example: Two+ FCs
+
+Let's take a more complex example -- this example deals with the creation of a binary classifier (0 and 1 only). While this example focuses on binary classification, the underlying principles can be extended to regression tasks. For instance, a binary classifier could be adapted to predict whether an input waveform is sinusoidal or square (view the working of the same here -- [fc-3.dsp](./examples/experiments/fc-3.dsp)). This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a neural network composed of three FCLs here. The first layer contains 2 neurons, the second layer contains 3 neuron and the final layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FCL to be $FC_{1}$, the second FCL to be $FC_{2}$ and the third FCL to be $FC_{3}$. The inputs for $FC_{1}$ are $x_{1}$ only. 
+
+![](./images/diff-threelayerfc.svg)
+
+The other input signals to the FCL are the gradients of the weights and biases to each neuron. $FC_{1}$ contains 2 neurons. From each neuron, we expect the following -- since this is NOT the final layer, we do not calculate the loss yet. As a result, here is what we expect from each neuron, assuming it has one input $x_{1}$ and the weights are $w_{1}$ and bias is $b$:
+
+$$
+{ y, \frac{\partial y}{\partial w_{1}}, \frac{\partial y}{\partial b}, \frac{\partial y}{\partial x_{1}} }
+$$
+
+Now, since we have multiple neurons in this FC, we route all the outputs (i.e. $y$) to the top of the circuit and hence, we can appropriately use the outputs to act as the input to the next FC. Users need to note that since this layer has 2 neurons, it will have 2 outputs (1 from each). As a result, the next FC (i.e. $FC_{2}$) will need to take in 2 inputs.
+
+What are we missing here to make these gradients appropriate for backpropagation? We're missing $\frac{\partial L}{\partial y}$ for each neuron. Since each neuron outputs a $y$, we need a partial derivative of L with respect to y in order to obtain the correct gradients for backpropagation.
+
+Let's move on to the second FCL $FC_{2}$. The outputs of $FC_{1}$ i.e. $y1, y2$ are now the inputs to this connected layer. What now? The same operation occurs and we attempt to produce the gradients (via end-to-end autodiff). Assume the inputs to this $FC_{2}$ to be now $x_{1}', x_{2}'$ instead of $y1, y2$. This $FC_{2}$ finally produces the following, assuming $w_{1}', w_{2}', b' ...$ to be the weights and biases of this layer (3 $y$ due to 3 neurons):
+
+$$
+{ y1, y2, y3, \frac{\partial y1}{\partial w_{1}'}, \frac{\partial y1}{\partial w_{2}'}, \frac{\partial y1}{\partial b'}, \frac{\partial y1}{\partial x_{1}'}, \frac{\partial y1}{\partial x_{2}'} ... } 
+$$
+
+The same pattern is observed for $y2$ and $y3$. The same occurs for $FC_{3}$. $FC_{2}$ had 3 neurons -- 3 outputs and hence, $FC_{3}$ must have 3 inputs. $FC_{3}$ must produce 1 output only (since we assumed that this is a classification task) and hence, we notice that it must have 1 neuron only. It produces the following, assuming $w_{1}'', w_{2}'', w_{3}'', b''$ to be the weights and biases of this layer.
+
+$$
+{ L, \frac{\partial L}{\partial w_{1}''}, \frac{\partial L}{\partial w_{2}''}, \frac{\partial L}{\partial w_{3}''}, \frac{\partial L}{\partial b''}, \frac{\partial L}{\partial x_{1}''}, \frac{\partial L}{\partial x_{2}''}, \frac{\partial L}{\partial x_{3}''} }
+$$
+
+Here, $x_{1}''$, $x_{2}''$, $x_{3}''$ are the inputs to $FC_{3}$ or the outputs of $FC_{2}$ (i.e. $y1, y2, y3$).
+
+Now, we need to appropriately modify the gradients that each neuron produced by $FC_{1}$ and $FC_{2}$. We do so by the simple chain rule. This is where we see a limitation of this specific algorithm. Chain rule, in this context, is a representation of symbolic differentation. 
+
+We have $\frac{\partial L}{\partial x_{1}''}, \frac{\partial L}{\partial x_{2}''}, \frac{\partial L}{\partial x_{3}''}$ in hand. These are essentially $\frac{\partial L}{\partial y1}, \frac{\partial L}{\partial y2}, \frac{\partial L}{\partial y3}$. 
+
+
+We now use the chain rule to produce the following gradients:
+
+$$
+{ \frac{\partial L}{\partial w_{1}'}, \frac{\partial L}{\partial w_{2}'}, \frac{\partial L}{\partial b'}, \frac{\partial L}{\partial x_{1}'}, \frac{\partial L}{\partial x_{2}'}, ... } 
+$$
+
+As a result, we've achieved the gradients for the weights and biases for each neuron in $FC_{2}$. We can now average (we explain why in the next paragraph) the input gradients from $FC_{2}$ to get the appropriate gradients for $FC_{1}$. This system proves that backpropagation by itself is a complex algorithm that needs to be finetuned for previous layers. Regardless, we have the following gradients left:
+
+$$
+{ \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}, \frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}} }
+$$
+
+These are just duplicates from each neuron. Typically, in machine learning applications, gradients are aggregated by taking the mean -- however, there are multiple methods of aggregation; we will stick to averaging for now. As a result, we provide these gradients (in this case, 3 gradients) for previous layer's backprop.
+
+#### Limitations of the backpropagation approach
+As stated above, we need input gradients from a layer to be fed into the backpropagation algorithm for a previous layer. This is to ensure that we obtain appropriate gradients for backprop. Appropriate gradients, in this context, also means the derivative of $L$ with respect to all parameters of that neuron. 
+
+Obviously, to do this, we implement the chain rule algorithm, by symbolically completing application of the chain rule as a
+final step. This is a major limitation we noticed during development.
+
+#### FCL Algorithm
+This library is specifically designed for building generalized neural networks. Users must note the following while using this library:
+- Be aware of the number of weights / biases that must enter a FC.
+- Note how to create the backpropagation environment.
+
+As a result, we define the following functions:
+
+##### Forward Pass
+The forward pass includes the conversion of a neuron's parameter $w$, $b$ and $x$ to $y$ via an activation function. This is done via the FC. This FC is just a collection of multiple neurons.
+
+```faust
+df.fc(N, n, activationFn, learning_rate)
+```
+
+Here, $N$ = number of neurons in the FC; $n$ = number of inputs to the FC.
+
+##### Activation Functions and Loss
+For the FC, we need to define the activation functions and losses. The losses would be a separate block which should be seen after the last FC layer. We need to use special activation functions and loss functions which you may call using the following:
+
+```faust
+df.activations.sigmoid
+...
+
+df.losses.L1(windowSize, y, N)
+...
+```
+
+Here, $y$ refers to the target variable that are looking for; $N$ refers to the number of inputs to the **LAST** FC layer.
+
+
+### Backpropagation
+Let's first define how to create a backpropagation environment. Our backpropagation environment requires knowledge about the parameters of the entire neural network. 
+
+
+```faust
+b = df.backpropNN((1, 3, 3, 2, 2, 1));
+```
+
+This is the backpropagation environment for the second example stated above. We define this environment by including the (number of neurons, number of inputs) from the last layer to the first layer. In this case, (1, 3) -> (3, 2) -> (2, 1). 
+
+To begin backpropagation itself, we ensure that it occurs in an end-to-end manner. With all signals as input, we use the following for backpropagation.
+
+```faust
+b.start(b.N - 1)
+```
+
+A demonstration of the backpropagation itself for a single FC can be seen here:
+
+![](./images/diff-backpropFC.svg)
+
+The internal workings of this involves using chain rule and routing mechanisms to appropriately route the gradients:
+
+![](./images/diff-chainRule.svg)
+
+This does backpropagation of the entire neural network -- but we internally do backpropagation layer by layer (i.e. FC by FC). It ignores the last layer, since the loss function automatically provides the correct gradients for backprop. The rest of the layers use this algorithm recursively.
+
+#### Gradient Averaging 
+Each neuron in an FC tends to produce a duplicate of the input gradients i.e. in this figure, each neuron produces input gradients (apart from the other 3 gradients):
+
+![](./images/diff-gradAvg.svg)
+
+$$
+\frac{\partial L}{\partial x_{1}}, \frac{\partial L}{\partial x_{2}}
+$$
+
+Three neurons do the above process. As stated in previous sections, machine learning engineers tend to aggregate these gradients by just averaging them out. We do the same -- but this process is hidden in the backpropagation environment.
+
+```faust
+df.gradAveraging(N, n)
+```
+
+Here, $N$ refers to the number of neurons in that FC, $n$ refers to the number of inputs in that FC.
+
+### A Generalized Example
+Let's take up the example in [fc.dsp](./examples/experiments/fc.dsp) and [fc-3.dsp](./examples/experiments/fc-3.dsp). The comments in this example are extensive and should guide you throughout the process.
+
+This segment of code is extremely generalized and you may add more layers / more backpropagation environment elements as needed.
+
+#### Final tips for creation of a neural network
+- You must know that while defining a neural network, you must use `par(i, b.next_signals(N), _)` to allow the gradients from all previous layers to pass through the current FC layer. $N$ in this context refers to the number of previous FC layers that were defined. Refer to the example for more understanding.
+- Note the number of weights and biases each FC should take in. The recursion should be crafted appropriately.
+
+### Bridging to a realistic example
+Using [fc-3.dsp](./examples/experiments/fc-3.dsp) as inspiration, we believe this example could serve as a foundation for generating a realistic dataset in another language, such as C++, and subsequently creating a functional neural network by integrating C++ with Faust. Additionally, this could be a stepping stone towards obtaining weights and biases and storing them in a file for offline inference.
 
 ## Roadmap
-
-- More loss functions, optimisers, momentum...
 - Automatic parameter normalisation...
-- Frequency-domain loss...
-- Reverse mode autodiff...
 - Batched training data/ground truth...
-- Offline training &rightarrow; weights &rightarrow; real-time inference...
+- Offline training / inference...
+- More layers such as convoluted / recurrent...
+- Exploration of the limitation in backprop...

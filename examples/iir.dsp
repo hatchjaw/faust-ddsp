@@ -5,8 +5,9 @@ df = library("diff.lib");
 
 NTAPS = 3;
 
-process = in <: _,_ : hgroup("Differentiable IIR", df.backprop(truth,learnable,d.learnL2(1<<3,1e-1)))
+process = in <: _,_ : hgroup("Differentiable IIR", df.backprop(truth,learnable,d.learnMSE(1<<3,d.optimizers.SGD(alpha))))
 with{
+    alpha = hslider("alpha", 1e-3, 1e-4, 1e-1, 1e-5);
     in = no.noise;
 
     truth = f : +~g

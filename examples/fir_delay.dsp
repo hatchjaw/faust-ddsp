@@ -15,7 +15,7 @@ process = in <: _,_
             // Route gradients to df.learn.
             par(n,NTAPS,(n+3,n+3))
         )
-        : vgroup("[1]Loss/gradient", d.learnL2(1<<3,1e-1),_,_)) ~ (!,si.bus(NTAPS))
+        : vgroup("[1]Loss/gradient", d.learnMSE(1<<3,d.optimizers.SGD(1e-1)),_,_)) ~ (!,si.bus(NTAPS))
     // Cut the gradients, but route loss to output so the bargraph doesn't get optimised away.
     ) : _,si.block(NTAPS),!,!
 with{

@@ -3,7 +3,7 @@ df = library("diff.lib");
 
 process = in <: _,_
     : hgroup("Differentiable lowpass",
-        df.backprop(groundTruth,learnable,d.learnL1(1<<0,5e-1))
+        df.backprop(groundTruth,learnable,d.learnMAE(1<<0,d.optimizers.SGD(5e-1)))
     )
 with {
     vars = df.vars((cutoff))
@@ -45,8 +45,9 @@ with {
     learnable = learnableLPF
     with {
         dd = d.diff;
+        input = d.input;
 
-        learnableLPF = d.input,(si.bus(vars.N) <: si.bus(vars.N*2))
+        learnableLPF = input,(si.bus(vars.N) <: si.bus(vars.N*2))
             : (dd(_),si.bus(vars.N) <: (dd(_),b0 : dd(*)),(dd(mem),b1 : dd(*))),_
             : dd(+),_
             : route(3,4,(1,3),(2,4),(3,1),(3,2))

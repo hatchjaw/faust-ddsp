@@ -1,7 +1,7 @@
 import("stdfaust.lib");
 df = library("diff.lib");
 
-process = in <: _,_ : df.backprop(gt,learnable,d.learnL2(1<<4,5e-4))
+process = in <: _,_ : df.backprop(gt,learnable,d.learnMSE(1<<4,d.optimizers.SGD(5e-4)))
 with {
     in = no.noise;
 

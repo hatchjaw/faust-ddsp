@@ -3,10 +3,11 @@ ba = library("basics.lib");
 ro = library("routes.lib");
 ma = library("maths.lib");
 df = library("diff.lib");
+an = library("analyzers.lib");
 
 declare name "Faust Automatic Differentiation Library";
 declare version "0.0.1";
-declare author "Thomas Rushton";
+declare author "Thomas Rushton; Advik Raj Basani";
 
 //==========================Variables of Interest===============================
 //
@@ -37,20 +38,25 @@ with {
 
 // Might not be the right name.
 backprop(groundTruth,learnable,lossFunction) = (
-    route(nvars+nInputs,nvars+nInputs,par(n,nvars,(n+1,n+3)),(nvars+1,1),(nvars+2,2))
-    : vgroup("Hidden", groundTruth),vgroup("Learned", learnable)
-    : route(2+nvars,4+nvars,
-        // Route ground truth output to loss/gradient function and to output.
-        (1,1),(1,nvars+3),
-        // Route learnable output to loss/gradient function and to output.
-        (2,2),(2,nvars+4),
-        // Route gradients to loss/gradient function.
-        par(n,nvars,(n+3,n+3))
-    )
-    : vgroup("[1]Loss/gradient", lossFunction,_,_)
-    // Feed the gradients back.
-    ) ~ (!,si.bus(nvars))
-    // Block the gradients, post-recursion.
+        route(nvars+nInputs, nvars+nInputs,
+            // Route incoming gradients to learnable.
+            par(n, nvars, (n+1, n+1+nInputs)), 
+            // Route input signals to groundTruth and learnable.
+            par(n, nInputs, (n+1+nvars, n+1))
+        )
+        : vgroup("Hidden", groundTruth),vgroup("Learned", learnable)
+        : route(2+nvars,4+nvars,
+            // Route ground truth output to loss/gradient function and to output.
+            (1,1),(1,nvars+3),
+            // Route learnable output to loss/gradient function and to output.
+            (2,2),(2,nvars+4),
+            // Route gradients to loss/gradient function.
+            par(n,nvars,(n+3,n+3))
+        )
+        : vgroup("[1]Loss/gradient", lossFunction,_,_)
+        // Feed the gradients back.
+        ) ~ (!,si.bus(nvars))
+        // Block the gradients, post-recursion.
     : _,si.block(nvars),_,_
 with {
     nvars = inputs(learnable),inputs(groundTruth) : -;
@@ -62,6 +68,17 @@ with {
 //==============================================================================
 
 env(vars) = environment {
+    // Forward mode automatic differentiation.
+    fwdAD(C) = par(i, inputs(C), input) : fwd(C)
+    with {
+        fwd(A ~ B) = fwd(A) ~ fwd(B);
+        fwd(A :> B) = fwd(A) : sumall(outputs(A)) : fwd(B);
+        fwd(A <: B) = fwd(A) <: fwd(B);
+        fwd((A,B)) = fwd(A),fwd(B);
+        fwd(A : B) = fwd(A) : fwd(B);
+        fwd(A) = diff(A);
+    };
+
     //=====================Differentiable primitives============================
     //
     //==========================================================================
@@ -69,6 +86,11 @@ env(vars) = environment {
     // Derivative of the identity function.
     // Returns nvars+1 parallel identity functions.
     diff(_) = par(i,vars.N+1,_);
+
+    // Derivative of the cut function.
+    // Returns the cut (basically nothing)
+    // <u, u'> = (! of u and ! of all partial derivatives)
+    diff(!) = par(i, vars.N+1, _ : !);
 
     // Differentiable addition.
     // Takes two dual numbers as input;
@@ -224,6 +246,10 @@ env(vars) = environment {
         };
     };
 
+    // Differentiable modulo function
+    // Takes a dual number as input;
+    // Returns the 
+
     // Differentiable sine function
     // Takes a dual number as input;
     // Returns the sine of the input, and its partial derivatives.
@@ -251,6 +277,192 @@ env(vars) = environment {
                                 // Prevent division by zero
             : tan,par(i,vars.N, _,((cos <: *),1e-10 : max) : /);
     };
+
+    // Differentiable asine function 
+    // Takes a dual number as input;
+    // Returns the asine of the input, and its derivative.
+    // asin(<u, u'>) = <asin(u), u'/sqrt(1 - u^2)>
+    diff(asin) = diffasin
+    with {
+        diffasin = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : asin, par(i, vars.N, _, (((1, (_ <: *) : -) : sqrt), 1e-10 : max) : /);
+    };
+
+    // Differentiable acosine function 
+    // Takes a dual number as input;
+    // Returns the acosine of the input, and its derivative.
+    // acos(<u, u'>) = <acos(u), -u'/sqrt(1 - u^2)>
+    diff(acos) = diffacos
+    with {
+        diffacos = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : acos, par(i, vars.N, _, (((1, (_ <: *) : -) : sqrt), 1e-10 : max) : / : *(-1));
+    };
+
+    // Differentiable atan function 
+    // Takes a dual number as input;
+    // Returns the atan of the input, and its derivative.
+    // atan(<u, u'>) = <atan(u), u'/(1 + u^2)>
+    diff(atan) = diffatan
+    with {
+        diffatan = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : atan, par(i, vars.N, _, (1, (_ <: *) : +) : /);
+    };
+
+    // Differentiable atan2 function
+    // Takes a dual number as input;
+    // Returns the atan2 of the input, and its derivative.
+    // atan2(<u, u'>, <v, v'>) = <atan(u, v), (u'v + v'u) / (u^2 + v^2)>
+    diff(atan2) = diffatan2
+    with {
+        diffatan2 = route(2*(vars.N+1), 2*(vars.N+1), (1,1), (vars.N+2,2), par(i, vars.N, ((i+2),(i+3))),
+            par(i, vars.N, ((i+vars.N+3),(i+vars.N+3))))
+            : route(2*(vars.N+1), (4*vars.N)+2, (1,1), (2,2),
+                par(i, vars.N, (i+3,dx), (2,dx + 1)
+                    with {
+                        dx = 2*i+3;
+                    }
+                ),
+                par(i, vars.N, (i+vars.N+3,dx+(2*(vars.N) + 3)), (1,dx+(2*(vars.N) + 4))
+                    with {
+                        dx = 2*i;
+                    }                
+                )
+            )
+            : _, _, par(i, 2*vars.N, _, _ : *)
+            : route(2*(vars.N+1), 2*(vars.N+2), (1,1), (1,3), (2,2), (2,4),
+                par(i, vars.N, (i+3,dx), (i+vars.N+3,dx+1)
+                    with {
+                        dx = 2*i+5;
+                    }
+                )
+            )
+            : atan2, ((_ <: *), (_ <: *) : +), par(i, vars.N, _, _ : -)
+            : route(vars.N+2, 1+2*vars.N, (1,1),
+                par(i, vars.N, (i+3,dx), (2,dx+1)
+                    with {
+                        dx = 2*i+2;
+                    }
+                )
+            )
+            : _, par(i, vars.N, (_, _ : /));
+    };
+
+    // Differentiable exp function 
+    // Takes a dual number as input;
+    // Returns the exp of the input, and its derivative.
+    // exp(<u, u'>) = <exp(u), u'*exp(u)>
+    diff(exp) = diffexp
+    with {
+        diffexp = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : exp, par(i, vars.N, _, (_ : exp) : *);
+    };
+
+    // Differentiable log function 
+    // Takes a dual number as input;
+    // Returns the log of the input, and its derivative.
+    // log(<u, u'>) = <log(u), u'/u>
+    diff(log) = difflog
+    with {
+        difflog = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : log, par(i, vars.N, _, _ : /);
+    };
+
+    // Differentiable log10 function 
+    // Takes a dual number as input;
+    // Returns the log of the input, and its derivative.
+    // log10(<u, u'>) = <log10(u), u'/ulog(10)>
+    diff(log10) = difflog10
+    with {
+        difflog10 = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : log10, par(i, vars.N, (_, _ : /), log(10) : /);
+    };
+
+    // Differentiable sqrt function 
+    // Takes a dual number as input;
+    // Returns the sqrt of the input, and its derivative.
+    // sqrt(<u, u'>) = <sqrt(u), u'/(2*sqrt(u))>
+    diff(sqrt) = diffsqrt
+    with {
+        diffsqrt = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
+            : sqrt, par(i, vars.N, _, ((_ : sqrt) : *(2)): div);
+    };
+
+    // Differentiable abs function 
+    // Takes a dual number as input;
+    // Returns the abs of the input, and its derivative.
+    // abs(<u, u'>) = <abs(u), u'*u/abs(u)>
+    diff(abs) = diffabs
+    with {
+        diffabs = route(vars.N+1, 3*vars.N+1, (1,1), par(i,vars.N, (1,3*(i+1)), (1, 3*(i+1)+1), (i+2,3*(i+1)-1)))
+            : abs, par(i, vars.N, _, (_, (_ : abs) : div): *);
+    };
+
+    // Differentiable min function 
+    // Takes a dual number as input;
+    // Returns the min of the input, and its derivative.
+    // min(<u, u'>, <v, v'>) = <min(u, v), d>
+    //                        d = { u' : (u < v) 
+    //                            { v' : (u >= v)
+    diff(min) = diffmin
+    with {
+        diffmin = route(2*(vars.N+1), 2*(vars.N+2), (1,1), (vars.N+2, 2), (1,3), (vars.N+2, 4), 
+            par(i, vars.N, ((i+2), (i+5))), par(i, vars.N, (i+vars.N+3, i+vars.N+5)))
+            : min, <, par(i, 2*vars.N, _)
+            : _, 
+            route(2*(vars.N)+1, 3*vars.N, 
+                par(i, vars.N, (1, temp_1)
+                    with {
+                        temp_1 = 3*i+1;
+                    }
+                ), 
+                par(i, vars.N, (i+2, temp_2), (i+vars.N+2, temp_2 + 1)
+                    with {
+                        temp_2 = 3*i+2;
+                    }
+                )
+            )
+            : _, par(i, vars.N, select2(_, _, _));
+    };
+
+    // Differentiable max function 
+    // Takes a dual number as input;
+    // Returns the max of the input, and its derivative.
+    // max(<u, u'>, <v, v'>) = <max(u, v), d>
+    //                        d = { u' : (u >= v)
+    //                            { v' : (u < v)
+    diff(max) = diffmax
+    with {
+        diffmax = route(2*(vars.N+1), 2*(vars.N+2), (1,1), (vars.N+2, 2), (1,3), (vars.N+2, 4), 
+            par(i, vars.N, ((i+2), (i+5))), par(i, vars.N, (i+vars.N+3, i+vars.N+5)))
+            : max, >=, par(i, 2*vars.N, _)
+            : _, 
+            route(2*(vars.N)+1, 3*vars.N, 
+                par(i, vars.N, (1, temp_1)
+                    with {
+                        temp_1 = 3*i+1;
+                    }
+                ), 
+                par(i, vars.N, (i+2, temp_2), (i+vars.N+2, temp_2 + 1)
+                    with {
+                        temp_2 = 3*i+2;
+                    }
+                )
+            )
+            : _, par(i, vars.N, select2(_, _, _));
+    };
+
+
+    // Differentiable floor function
+    // Takes a dual number as input;
+    // Returns the floor of the input, and its derivative.
+    // floor(<u, u'>) = <floor(u), u'>
+    diff(floor) = floor, par(i, vars.N, _);
+
+    // Differentiable ceil function
+    // Takes a dual number as input;
+    // Returns the ceil of the input, and its derivative
+    // ceil(<u, u'>) = <ceil(u), u'>
+    diff(ceil) =  ceil, par(i, vars.N, _);
 
     // Differentiable one-sample delay
     // <u, u'>[n-1] = <u[n-1], u'[n-1]>
@@ -333,6 +545,12 @@ env(vars) = environment {
     // <x, x'> = <x, 0>
     diff(x) = diffconst with{ diffconst = x,par(i,vars.N,0); };
 
+    // Helper division function.
+    // Ensures that division by zero is avoided.
+    div(x, y) = divi with {
+        divi = x, (y, ma.EPSILON : min) : /;
+    };
+
     // A differentiable (audio) input. Similar to a number.
     // Returns the input, plus its partial derivatives wrt all variables, which
     // are all zero.
@@ -361,12 +579,39 @@ env(vars) = environment {
         sumallImpl(N) = seq(n,N-2,diff(+),par(m,N-n-2,diff(_))) : diff(+);
     };
 
+    //===========================Learning Rate Schedulers=======================
+    //
+    //==========================================================================
+    // initial_lr : learning_rate_scheduler(epochs)
+    learning_rate_scheduler(epochs, delta) = _ : helper(epochs)~(_,_) : (!, _)
+        with {
+            helper(epochs) = ((_ <: _, _),_,_
+                    : _, (_ == 0, _, _ : select2)
+                    : ((_:+~1 <: attach(hbargraph("epochs", 0, 10))) <: _, _ % epochs == 0), (_ <: _, _ * exp(delta)) 
+                    : _, (select2 <: attach(hbargraph("lr", 0.0001, 0.5))));
+        };
+
+    //===========================Optimizers=====================================
+    // 
+    //==========================================================================
+    // Stochastic gradient descent
+    optimizers = environment {
+        SGD(learningRate) = par(i,vars.N,_,learningRate : *);
+        RMSProp(learningRate,rho) = par(i, vars.N, (_ <: _,(_ :((_ : ^(2)) : *(1 - rho)) : +~(_ : *(rho))))
+                    : _,(sqrt : +(ma.EPSILON)) : / : *(learningRate)); 
+        Adam(learningRate,beta1,beta2) = par(i, vars.N, (_ <: (_ : *(1 - beta1) : +~(_ : *(beta1)))
+                    ,((_ : ^(2)) : *(1 - beta2) : +~(_ : *(beta2))))
+                    : /(1 - beta1),/(1 - beta2)
+                    : _,(sqrt : +(ma.EPSILON))
+                    : / : *(learningRate));
+    };
+
     //===========================Loss functions=================================
     //
     //==========================================================================
 
     // Stochastic gradient descent with time-domain L2 norm loss function
-    learnL2(windowSize, learningRate) =
+    learnMSE(windowSize, optimizer) =
         // Window the input signals
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
@@ -377,7 +622,7 @@ env(vars) = environment {
         // Calculate gradients
         : _,gradients
         // Scale gradients by the learning rate
-        : _,par(i,vars.N,_,learningRate : *)
+        : _,optimizer
     with {
         window = ba.slidingMean(windowSize);
         // Loss function (L2 norm)
@@ -394,8 +639,67 @@ env(vars) = environment {
             : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
     };
 
-    // L1 norm
-    learnL1(windowSize, learningRate) =
+    // Stochastic gradient descent with time-domain mean-squared log error
+    learnMSLE(windowSize,optimizer) =
+        // Window the input signals
+        par(n,2+vars.N,window)
+        // Calculate the difference between the ground truth and learnable outputs
+        // (Is cross necessary?)
+        : _, (_ <: _, _), par(i, vars.N, _)
+        : (ro.cross(2) : ((_, 1 : +) : log), ((_, 1 : +) : log) : -),_,pds
+        // Calculate loss (this is just for show, since there's no sensitivity threshold)
+        : (_ <: loss,_),(_, 1 : +),pds
+        // Calculate gradients
+        : _,gradients
+        // Scale gradients by the learning rate
+        : _,optimizer
+    with {
+        window = ba.slidingMean(windowSize);
+        // Loss function: MSLE
+        loss = ^(2) <: attach(hbargraph("[100]loss",0,.05));
+        // A way to move the partial derivatives around.
+        pds = si.bus(vars.N);
+        // Calculate gradients: 2 * dy/dx_i * (log(learnable + 1) - log(groundtruth + 1)) / (learnable + 1)
+        gradients = (_,_ : /),par(i,vars.N, _,2 : *)
+            : routeall
+            : par(i,vars.N, * <: attach(hbargraph("[101]gradient %i",-.5,.5)));
+
+        // A utility to duplicate the first input for combination with all remaining inputs.
+        routeall = _,si.bus(vars.N)
+            : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
+    };
+
+    // Stochastic gradient descent with time-domain Huber loss
+    learnHuber(windowSize, optimizer, delta) =
+        // Window the input signals
+        par(n,2+vars.N,window)
+        // Calculate the difference between the ground truth and learnable outputs
+        // (Is cross necessary?)
+        : (ro.cross(2) : -),pds
+        // Calculate loss (this is just for show, since there's no sensitivity threshold)
+        : (_ <: loss,_),pds
+        // Calculate gradients
+        : _,gradients
+        // Scale gradients by the learning rate
+        : _,optimizer
+    with {
+        window = ba.slidingMean(windowSize);
+        // Loss function: https://en.wikipedia.org/wiki/Huber_loss
+        loss = (_ <: (abs : >(delta)), (_ <: (^(2) : /(2)), (delta, (abs, (delta : /(2)) : -) : *))) : select2 <: attach(hbargraph("[100]loss",0,.05));
+        // A way to move the partial derivatives around.
+        pds = si.bus(vars.N);
+        // Calculate gradients; for this error
+        gradients = ((_ <: (abs : >(delta)), (_ <: _, ((_ <: (_, abs) : /), delta : *))) : select2),par(i,vars.N, _)
+            : routeall
+            : par(i,vars.N, * <: attach(hbargraph("[101]gradient %i",-.5,.5)));
+
+        // A utility to duplicate the first input for combination with all remaining inputs.
+        routeall = _,si.bus(vars.N)
+            : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
+    };
+
+    // MAE loss
+    learnMAE(windowSize, optimizer) =
         // Window the input signals
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
@@ -405,7 +709,7 @@ env(vars) = environment {
         // Calculate gradients
         : _,gradients
         // Scale gradients by the learning rate
-        : _,par(i,vars.N,_,learningRate : *)
+        : _,optimizer
     with {
         window = ba.slidingMean(windowSize);
         // Loss function (L1 norm)
@@ -421,7 +725,7 @@ env(vars) = environment {
 
     // As above but takes batches of ground truth input.
     // Needs work...
-    learnN(windowSize, learningRate, ntrain) =
+    learnN(windowSize, optimizer, ntrain) =
         // Window the input signals
         par(n,ntrain+1+vars.N,window)
         // Calculate the difference between each training example and the learned output...
@@ -434,7 +738,7 @@ env(vars) = environment {
         // And gradients
         : _,gradients
         // Scale gradients by the learning rate
-        : _,par(i,vars.N,_,learningRate : *)
+        : _,optimizer
     with {
         window = ba.slidingMean(windowSize);
         // Loss function (L1 norm)
@@ -447,4 +751,198 @@ env(vars) = environment {
             : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+2),(i+2,2*i+1)))
             : par(i,vars.N, / <: attach(hbargraph("[101]gradient %i",-.5,.5)));
     };
+
+    // Stochastic gradient descent with frequency-domain linear loss function
+    learnLinearFreq(windowSize, optimizer) =
+        // Window the input signals
+        par(n,2+vars.N,window)
+        // loss calculation via spectral binning
+        : (loss_fn <: _,_), pds
+        // Calculate gradients
+        : _,gradients
+        // Scale gradients by the learning rate
+        : _,optimizer
+    with {
+        window = ba.slidingMean(windowSize);
+        // Loss function
+        N = 1 << 4;
+        loss_fn(truth, learnable) = (truth <: _,an.rfft_analyzer_magsq(N) : smoothing), (learnable <: _,an.rfft_analyzer_magsq(N) : smoothing)
+                : _, route(N/2+2, N/2+2, (N/2+2,1),par(i,N/2+1,(i+1,i+2))), par(i,N/2+1,_)
+                : !, !, loss_helper;
+        // smoothing
+        smoothing = _, par(i,N/2+1,si.smooth(ba.tau2pole(0.05)));
+        // Helper (this is a bit complex to have in a single fn)
+        loss_helper = route(N+2, N+2, par(i,N/2+1,(i+1,x),(i+N/2+2,x+1)
+                with{
+                    x = 2*i+1;
+                }))
+                : par(i,N/2+1, -) 
+                : sum(i,N/2+1,_)
+                : /(N/2+1) <: attach(hbargraph("Loss",0,1));
+        // A way to move the partial derivatives around.
+        pds = si.bus(vars.N);
+        // Calculate gradients: loss * dy/dx_i
+        gradients =  _,par(i,vars.N, _, 1e-6 : max)
+            : routeall
+            : par(i,vars.N, * <: attach(hbargraph("[101]gradient %i",-.01,.01)));
+        // A utility to duplicate the first input for combination with all remaining inputs.
+        routeall = _,si.bus(vars.N)
+            : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
+    };
 };
+
+//===========================Activation Functions===========================
+//
+//==========================================================================
+// We define activation functions in an environment.
+activations = environment {
+    sigmoid(d) = d.diff(0),d.diff(_) : d.diff(-) : d.diff(1),d.diff(exp),d.diff(1) : d.diff(_),d.diff(+) : d.diff(/);
+};
+
+//===========================Loss Functions=================================
+//
+//==========================================================================
+// Similar to activation functions, we define loss functions in an environment.
+// This is especially effective when we need to use the loss functions in a neural network.
+// Note that these loss functions can ONLY be used in the context of a neural network and only the final fully connected layer.
+// This is because the loss functions are defined in terms of the output of the neural network.
+losses = environment {
+    L1(windowSize, y, N) = lossFn(windowSize, y, _, N)
+    with {
+        lossFn(windowSize, y, yHat, N) = yHat - y, par(i, 2*N+1, _)
+                                    : window(windowSize, N)
+                                    : d.diff(abs)
+        with {
+            window(size, N) = par(i, 2*N+2, ba.slidingMean(size));
+            v = vars((par(i, 2*N+1, _)));
+            d = env(v);
+        };
+    };
+
+    L2(windowSize, y, N) = lossFn(windowSize, y, _, N)
+    with {
+        lossFn(windowSize, y, yHat, N) = yHat - y, par(i, 2*N+1, _)
+                                    : window(windowSize, N), d.diff(2)
+                                    : d.diff(^)
+        with {
+            window(size, N) = par(i, 2*N+2, ba.slidingMean(size));
+            v = vars((par(i, 2*N+1, _)));
+            d = env(v);
+        };
+    };
+};
+
+//========================Neuron network blocks=============================
+//
+//==========================================================================
+// Core weights and biases definitions -- this is the core of the neural network.
+weights(n, learningRate) = par(i, n, _ : *(learningRate) : -~_ <: attach(hbargraph("weight%i", -1, 1)));
+bias(learningRate) = _ : *(learningRate) : -~_ <: attach(hbargraph("bias", -1, 1));
+
+// Here, we define the neuron. This is the smallest element of a fully connected layer.
+// It takes in the number of inputs, the activation function, and the learning rate.
+// Experimentally, we noticed that learning rate should be of the magnitude 1e-5 or less; otherwise, the system seems unstable.
+// Input : w, b, x
+// Subprocesses: Convert inputs to z = w*x + b, apply activation function, calculate gradients
+// Output: y, dy/dw1, dy/dw2... dy/dwN, dy/db, dy/dx1, dy/dx2... dy/dxN
+neuron(N, activation, learningRate) = cross : update_params : act : grad_route(N)
+    with {
+        // Appropriately routing the signals
+        cross = ro.cross(2*N+1) : ro.cross(N), _, ro.cross(N)
+            : par(i, N, _), route(N+1, N+1, par(i, N, (i+2, i+1)), (1,N+1));
+        
+        // Recursively updating the weights and biases
+        update_params = par(i, N, _), weights(N, learningRate), bias(learningRate);
+
+        // Routing the signals to the activation function
+        routing = route(2*N+1, 2*N+1,
+            par(i, N, (i+1,2*i+1), (i+1+N,2*i+2)), (2*N+1,2*N+1));
+
+        // Applying the activation function
+        act = routing : (par(i, N, v.var(i+1),v.var(i+1+N) : d.diff(*)) : d.sumall(N)),v.var(2*N+1) : d.diff(+)
+            : acti
+            with {
+                v = vars((par(i, 2*N+1, _)));
+                d = env(v);
+                acti = activation(d); 
+            };
+
+        // Reset the routes -- making the signals ready for the gradient calculation
+        grad_route(N) = _, ro.cross(2*N), _ : _, ro.cross(N), ro.cross(N), _
+                    : _, par(i, N, _), route(N+1, N+1, (N+1, 1), par(i, N, (i+1,i+2)));
+    }; 
+
+// Fully connected (FC) layer is one of the most popular simplified layers of a neural network. It consists of a collection of neurons.
+// It takes in the number of neurons, the number of inputs, the activation function, and the learning rate.
+// Input : N (number of neurons), n (number of inputs), activation function, learning rate
+// Subprocesses: Routing the signals to the neurons
+// Output: y1, y2, ... yN, dy1/dw1, dy1/dw2... dy1/dwN, dy1/db1, dy2/dw1, dy2/dw2... dy2/dwN, dy2/db2, ... dyN/dw1, dyN/dw2... dyN/dwN, dyN/dbN, dy1/dx1, dy1/dx2... dy1/dxN, dy2/dx1, dy2/dx2... dy2/dxN, dyN/dx1, dyN/dx2... dyN/dxN
+fc(N, n, activationFn, learningRate) = // Route signals appropriately -- allow the inputs and corresponding weights to be sent to each neuron
+                                    route(N*(n+1)+n, N*(2*n+1), 
+                                    par(i, (n+1)*N, (i+1,i+1+n*int(i / (n+1)))),
+                                    par(i, N, par(j, n, (j+1+(n+1)*N, (j+1+(i+1)*(n+1)+i*(n))))))
+                                    // Apply the neuron to each set of inputs
+                                    : par(i, N, (neuron(n, activationFn, learningRate)))
+                                    // Pushing all the outputs (y) to the top and gradients and biases to the bottom
+                                    : route((2*n+2)*N, (2*n+2)*N, par(i, N, (i*(2*n+2)+1, i+1)),
+                                    par(i, N, par(j, 2*n+1, (i*(2*n+2)+j+2, N+i*(2*n+1)+j+1))));
+
+// Backpropagation is implemented as a separate differentiable environment.
+// Note that this implementation has a limitation that violates automatic differentiation. We follow symbolic differentiation in certain stages of the process.
+// Read the documentation for more details.
+backpropNN(params) = environment {
+        // Calculate the number of FCs in the network
+        N = ba.count(params) / 2;
+
+        // 0 = N-indexed (from 0 to N-1)
+        // This recursive function calculates the number of gradients of the previous layers that should be allowed to pass through.
+        // This is necessary for the routing process. Note that this recursive function is N-indexed i.e Nth layer is represented as 0 here.
+        // This means that at the Nth layer, the number of gradients that should be allowed to pass through is 0.
+        // This is because the Nth layer is the last layer in the network. 
+        next_signals(0) = 0;
+        next_signals(n) = next_signals(n-1) + ((ba.take(2*(N-n+1), params))*2+1)*(ba.take(2*(N-n+1)-1, params));
+
+        // 1 = 1-indexed (from 1 to N-1)
+        // This recursive function calculates the number of gradients of the next layers that should be allowed to pass through.
+        // This is necessary for the routing process. Note that this recursive function is 1-indexed. Note that 0 is not valid here due to the fact that the output neuron already has gradients ready for backpropagation.
+        // This means that at the 1st layer, the number of gradients that should be allowed to pass through is number of gradients of the output layer.
+        // This is because the 1st layer is the first layer in the network. Furthermore, 1-indexing is used to allow for the 0th layer to be the output layer.
+        prev_signals(1) = (ba.take(2, params) + 1)*ba.take(1, params) + 1;
+        prev_signals(n) = prev_signals(n-1) + ((ba.take(2*n, params))+1)*(ba.take(2*n-1, params));
+
+        // This consolidates the previous, backpropagation of the current layer and next gradients in one function.
+        backprop_helper(M) = par(i, prev_signals(M), _), df.backpropFC(ba.take(2*M+2, params), ba.take(2*M+1, params)), par(i, next_signals(N-M-1), _);
+
+        // This recursive function allows us to start the backpropagation process for entire NN.
+        start(1) = backprop_helper(1);
+        start(N) = start(N-1) : backprop_helper(N);
+};
+
+// This is the core of the backpropagation process. This is where we calculate the gradients per FC. 
+// Note that this process follows symbolic differentiation. Read the documentation about the reasoning for the same.
+backpropFC(N, n) = // Start off with routing the outputs of the previous backpropagation layer to the chain rule mechanism.
+        route((2*N+1)*n + n, (2*N+1)*n + n, par(i, n, (i+1, i+1+(2*N+1)*i), 
+        par(j, 2*N+1, (n+j+1+(2*N+1)*i, (i*(2*N+2)+1) + j+1))))
+        // Apply the chain rule mechanism to calculate the gradients of the current FC.
+        : par(i, n, autoChainRule) : prepareGrads(N, n) 
+        // Average the gradients of the current FC -- this is necessary for the backpropagation process.
+        : par(i, (N+1)*n, _), gradAveraging(N, n)
+        with {
+            // This is the chain rule mechanism. It is used to calculate the gradients of the current FC.
+            autoChainRule = route(2*N+2, 4*N+2, par(i, 2*N+1, (1, 2*i+1), (i+2, 2*i+2))) : autoChain;
+            // This step completes the chain rule mechanism and provides the appropriate gradients for recursion.
+            autoChain = par(i, 2*N+1, (v.var(1), d.input : d.diff(*)) : _, si.block(4*N+2)
+                        with {
+                            v = df.vars((par(j, 4*N+2, _)));
+                            d = df.env(v);
+                        }
+                    );
+
+            // Prepares the gradients to be recursed backwards to the FC for updating the weights and biases.
+            prepareGrads(N, n) = route((2*N+1)*n, (2*N+1)*n, par(i, n, 
+                        par(j, N+1, (j+1+i*(2*N+1), (1+N)*i+(j+1))), 
+                        par(k, N, (k+1+N+1+(i)*(2*N+1),(k+1+i*N+((N+1)*n))))));
+            
+            // This averages the gradients of the current FC. This is necessary for the backpropagation process.
+            gradAveraging(N, n) = route(N*n, N*n, par(i, N+1, par(j, n, (j+i*N+1, i+1+j*n)))) : par(i, N, sum(j, n, _)) : par(i, N, _ : /(n));
+        };
