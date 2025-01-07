@@ -12,18 +12,41 @@ declare author "Thomas Rushton; Advik Raj Basani";
 //==========================Variables of Interest===============================
 //
 //==============================================================================
-vars(vars) = environment {
-    N = outputs(vars);
-    var(i) = ba.take(i,vars),pds(N,i)
+// vars(vars) = environment {
+//     N = outputs(vars);
+//     var(i) = ba.take(i,vars),pds(N,i)
+//     with {
+//         pds(N,i) = par(j,N,i-1==j);
+//     };
+// };
+
+
+// Possible to use pattern matching here?...
+var(meter, init) = -~_ : _,init : + <: attach(meter);
+// var0(meter) = var(meter, 0.0);
+// var(meter) = var((meter,0.0));
+// var((meter,init)) = -~_ : _,init : + <: attach(meter);
+
+vars(V) = environment {
+    // Count the variables.
+    N = outputs(V);
+    // Retrieve a variable by index i.
+    var(i) = take(i, V),pds(N, i)
     with {
-        pds(N,i) = par(j,N,i-1==j);
+        // Compute partial derivatives of
+        // variable x_i.
+        pds(N, i) = par(j, N, i-1==j);
+
+        take(i, L) = _ <: L:sel with {
+            sel = par(j, i-1, !),_,par(j, outputs(L)-i, !);
+        };
     };
 };
 
 // A differentiable variable.
 // Returns a dual signal containing the variable and a vector of its partial derivatives.
 // [ xi, dxi/dx1, dxi/dx2, ... , dxi/dxN ]
-var(I,var,nvars) = var,par(i,nvars,i+1==I);
+// var(I,var,nvars) = var,par(i,nvars,i+1==I);
 // TODO: replace with something that encapsulates gradient descent and metering, e.g.
 // var(nvars,I,graph) = -~_ <: attach(graph),par(i,nvars,i+1==I);
 // TODO: also normalisation?
@@ -40,7 +63,7 @@ with {
 backprop(groundTruth,learnable,lossFunction) = (
         route(nvars+nInputs, nvars+nInputs,
             // Route incoming gradients to learnable.
-            par(n, nvars, (n+1, n+1+nInputs)), 
+            par(n, nvars, (n+1, n+1+nInputs)),
             // Route input signals to groundTruth and learnable.
             par(n, nInputs, (n+1+nvars, n+1))
         )
@@ -205,9 +228,9 @@ env(vars) = environment {
     // NB. due to the presence of the natural log, may require that a differentiable
     // variable never equals exactly zero, e.g.
     //   var = -~_,1e-10 : + ...
-    diff(^) = diffexp
+    diff(^) = diffpow
     with {
-        diffexp = route(nIN,nOUT,
+        diffpow = route(nIN,nOUT,
             (u,1),(v,2),    // u^v
             (u,3),(v,4),    // u^{v-1}
             (u,5),          // u*ln(u)
@@ -248,7 +271,7 @@ env(vars) = environment {
 
     // Differentiable modulo function
     // Takes a dual number as input;
-    // Returns the 
+    // Returns the
 
     // Differentiable sine function
     // Takes a dual number as input;
@@ -278,7 +301,7 @@ env(vars) = environment {
             : tan,par(i,vars.N, _,((cos <: *),1e-10 : max) : /);
     };
 
-    // Differentiable asine function 
+    // Differentiable asine function
     // Takes a dual number as input;
     // Returns the asine of the input, and its derivative.
     // asin(<u, u'>) = <asin(u), u'/sqrt(1 - u^2)>
@@ -288,7 +311,7 @@ env(vars) = environment {
             : asin, par(i, vars.N, _, (((1, (_ <: *) : -) : sqrt), 1e-10 : max) : /);
     };
 
-    // Differentiable acosine function 
+    // Differentiable acosine function
     // Takes a dual number as input;
     // Returns the acosine of the input, and its derivative.
     // acos(<u, u'>) = <acos(u), -u'/sqrt(1 - u^2)>
@@ -298,7 +321,7 @@ env(vars) = environment {
             : acos, par(i, vars.N, _, (((1, (_ <: *) : -) : sqrt), 1e-10 : max) : / : *(-1));
     };
 
-    // Differentiable atan function 
+    // Differentiable atan function
     // Takes a dual number as input;
     // Returns the atan of the input, and its derivative.
     // atan(<u, u'>) = <atan(u), u'/(1 + u^2)>
@@ -325,7 +348,7 @@ env(vars) = environment {
                 par(i, vars.N, (i+vars.N+3,dx+(2*(vars.N) + 3)), (1,dx+(2*(vars.N) + 4))
                     with {
                         dx = 2*i;
-                    }                
+                    }
                 )
             )
             : _, _, par(i, 2*vars.N, _, _ : *)
@@ -347,8 +370,8 @@ env(vars) = environment {
             : _, par(i, vars.N, (_, _ : /));
     };
 
-    // Differentiable exp function 
-    // Takes a dual number as input;
+    // Differentiable exponential function
+    // Takes a dual signal as input;
     // Returns the exp of the input, and its derivative.
     // exp(<u, u'>) = <exp(u), u'*exp(u)>
     diff(exp) = diffexp
@@ -357,7 +380,7 @@ env(vars) = environment {
             : exp, par(i, vars.N, _, (_ : exp) : *);
     };
 
-    // Differentiable log function 
+    // Differentiable log function
     // Takes a dual number as input;
     // Returns the log of the input, and its derivative.
     // log(<u, u'>) = <log(u), u'/u>
@@ -367,7 +390,7 @@ env(vars) = environment {
             : log, par(i, vars.N, _, _ : /);
     };
 
-    // Differentiable log10 function 
+    // Differentiable log10 function
     // Takes a dual number as input;
     // Returns the log of the input, and its derivative.
     // log10(<u, u'>) = <log10(u), u'/ulog(10)>
@@ -377,7 +400,7 @@ env(vars) = environment {
             : log10, par(i, vars.N, (_, _ : /), log(10) : /);
     };
 
-    // Differentiable sqrt function 
+    // Differentiable sqrt function
     // Takes a dual number as input;
     // Returns the sqrt of the input, and its derivative.
     // sqrt(<u, u'>) = <sqrt(u), u'/(2*sqrt(u))>
@@ -387,7 +410,7 @@ env(vars) = environment {
             : sqrt, par(i, vars.N, _, ((_ : sqrt) : *(2)): div);
     };
 
-    // Differentiable abs function 
+    // Differentiable abs function
     // Takes a dual number as input;
     // Returns the abs of the input, and its derivative.
     // abs(<u, u'>) = <abs(u), u'*u/abs(u)>
@@ -397,24 +420,24 @@ env(vars) = environment {
             : abs, par(i, vars.N, _, (_, (_ : abs) : div): *);
     };
 
-    // Differentiable min function 
+    // Differentiable min function
     // Takes a dual number as input;
     // Returns the min of the input, and its derivative.
     // min(<u, u'>, <v, v'>) = <min(u, v), d>
-    //                        d = { u' : (u < v) 
+    //                        d = { u' : (u < v)
     //                            { v' : (u >= v)
     diff(min) = diffmin
     with {
-        diffmin = route(2*(vars.N+1), 2*(vars.N+2), (1,1), (vars.N+2, 2), (1,3), (vars.N+2, 4), 
+        diffmin = route(2*(vars.N+1), 2*(vars.N+2), (1,1), (vars.N+2, 2), (1,3), (vars.N+2, 4),
             par(i, vars.N, ((i+2), (i+5))), par(i, vars.N, (i+vars.N+3, i+vars.N+5)))
             : min, <, par(i, 2*vars.N, _)
-            : _, 
-            route(2*(vars.N)+1, 3*vars.N, 
+            : _,
+            route(2*(vars.N)+1, 3*vars.N,
                 par(i, vars.N, (1, temp_1)
                     with {
                         temp_1 = 3*i+1;
                     }
-                ), 
+                ),
                 par(i, vars.N, (i+2, temp_2), (i+vars.N+2, temp_2 + 1)
                     with {
                         temp_2 = 3*i+2;
@@ -424,7 +447,7 @@ env(vars) = environment {
             : _, par(i, vars.N, select2(_, _, _));
     };
 
-    // Differentiable max function 
+    // Differentiable max function
     // Takes a dual number as input;
     // Returns the max of the input, and its derivative.
     // max(<u, u'>, <v, v'>) = <max(u, v), d>
@@ -432,16 +455,16 @@ env(vars) = environment {
     //                            { v' : (u < v)
     diff(max) = diffmax
     with {
-        diffmax = route(2*(vars.N+1), 2*(vars.N+2), (1,1), (vars.N+2, 2), (1,3), (vars.N+2, 4), 
+        diffmax = route(2*(vars.N+1), 2*(vars.N+2), (1,1), (vars.N+2, 2), (1,3), (vars.N+2, 4),
             par(i, vars.N, ((i+2), (i+5))), par(i, vars.N, (i+vars.N+3, i+vars.N+5)))
             : max, >=, par(i, 2*vars.N, _)
-            : _, 
-            route(2*(vars.N)+1, 3*vars.N, 
+            : _,
+            route(2*(vars.N)+1, 3*vars.N,
                 par(i, vars.N, (1, temp_1)
                     with {
                         temp_1 = 3*i+1;
                     }
-                ), 
+                ),
                 par(i, vars.N, (i+2, temp_2), (i+vars.N+2, temp_2 + 1)
                     with {
                         temp_2 = 3*i+2;
@@ -578,6 +601,56 @@ env(vars) = environment {
         sumallImpl(2) = diff(+);
         sumallImpl(N) = seq(n,N-2,diff(+),par(m,N-n-2,diff(_))) : diff(+);
     };
+
+    //======================== Neural Networks ================================
+    //
+    //=========================================================================
+    neuron(NINPUTS, activationFunction) = Z : activationFunction
+    with {
+        WX = par(i, NINPUTS, vars.var(i+1),diff(_) : diff(*));
+        b = vars.var(NINPUTS+1);
+
+        Z = WX,b : sumall(NINPUTS + 1);
+    };
+
+    layers = environment {
+        // Input layer
+        // Expects inputs of the form, e.g. for 2 neurons each with 2 weights:
+        // w00',w01',b0',w10',w01',b1',x1,x2,x3,x4
+        inputLayer(LAYERSPEC) = route(nIn, nIn,
+            par(n, nNeurons,
+                par(m, weightsPerNeuron,
+                    // Weights
+                    n + m + 1 + n * weightsPerNeuron,
+                    n + 2 * m + 1 + n * (2 * weightsPerNeuron),
+                    // Inputs
+                    totalWeightsAndBiases + 1 + (weightsPerNeuron) * n + m,
+                    2 * (1 + m) + n * (2 * weightsPerNeuron + 1)
+                ),
+                // biases
+                (n + 1) * (weightsPerNeuron + 1), (n + 1) * 2 * weightsPerNeuron + n + 1
+            ))
+            : par(n, nNeurons, par(m, weightsPerNeuron, _,input),_)
+        with {
+            nNeurons = ba.take(1, LAYERSPEC);
+            weightsPerNeuron = ba.take(2, LAYERSPEC);
+            totalWeightsAndBiases = nNeurons * (weightsPerNeuron + 1);
+            nIn = nNeurons * weightsPerNeuron + vars.N;
+        };
+
+        // Dense (or fully-connected) layer
+        dense(nNeurons, wPerNeuron, activationFunction) = par(n, nNeurons, neuron(wPerNeuron, activationFunction));
+    };
+
+    // TODO: get/take correct gradients; pass gradients in parallel with outer layers.
+    nn(LAYERSPEC, activationFunction) = layers.inputLayer(LAYERSPEC)
+        : seq(k, nLayers, layers.dense(nNeurons, wPerNeuron, activationFunction)
+        with {
+            nNeurons = ba.take(2 * k + 1, LAYERSPEC);
+            wPerNeuron = ba.take(2 * k + 2, LAYERSPEC);
+        }) with {
+            nLayers = ba.count(LAYERSPEC) / 2;
+        };
 
     //===========================Learning Rate Schedulers=======================
     //
