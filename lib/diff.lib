@@ -658,23 +658,59 @@ env(vars) = environment {
         };
 
         // Dense (or fully-connected) layer
-        dense(nNeurons, wPerNeuron, activationFunction) = par(n, nNeurons, neuron(wPerNeuron, activationFunction));
+        dense(nNeurons, wPerNeuron, activationFunction) = routeToNeurons
+            : par(n, nNeurons, neuron(wPerNeuron, activationFunction))
+        with {
+            // For each neuron, route:
+            // _ a weight gradient
+            // _ a primal input
+            // _ partial derivatives of the input
+            // ...
+            // _ a bias gradient
+            routeToNeurons = route(nIn, nIn,
+                // For each neuron...
+                par(n, nNeurons,
+                    // For each weight in that neuron...
+                    par(w, wPerNeuron,
+                        // Route the weight gradient
+                        gradStart + w + n * (wPerNeuron + 1),
+                        1 + n * neuronIns + w * (vars.N + 2),
+                        // And route an input + PDs
+                        par(i, vars.N + 1,
+                            1 + n * (wPerNeuron * (vars.N + 1)) + w * (vars.N + 1) + i,
+                            2 + n * neuronIns + w * (vars.N + 2) + i
+                        )
+                    ),
+                    // Route the bias gradient
+                    gradStart + (n + 1) * wPerNeuron + n,
+                    (n + 1) * neuronIns
+                ))
+                with {
+                    nIn = nNeurons * (wPerNeuron + wPerNeuron * (1 + vars.N) + 1);
+                    neuronIns = wPerNeuron * (vars.N + 2) + 1;
+                    gradStart = nNeurons * (wPerNeuron) * (vars.N + 1) + 1;
+                }
+                : par(n, nNeurons, par(w, wPerNeuron, _,diff(_)),_);
+        };
     };
 
     // TODO: get/take correct gradients; pass gradients in parallel with outer layers.
-    nn(LAYERSPEC, activationFunction) = layers.inputLayer(LAYERSPEC),nonInGrads
-        : seq(k, nLayers, layer(nLayers - k - 1)// layers.dense(nNeurons, wPerNeuron, activationFunction)
-        with {
-            nNeurons = ba.take(2 * k + 1, LAYERSPEC);
-            wPerNeuron = ba.take(2 * k + 2, LAYERSPEC);
+    // TODO: output from neurons in layer n should be input for all neurons in layer n+1.
+    nn(LAYERSPEC, activationFunction) = inputLayer,allGradients
+        : layers.dense(2, 2, activationFunction),si.bus(3)
+        : layers.dense(1, 2, activationFunction)
+        // : seq(k, nLayers, layer(nLayers - k - 1)// layers.dense(nNeurons, wPerNeuron, activationFunction)
+        // with {
+        //     nNeurons = ba.take(2 * k + 1, LAYERSPEC);
+        //     wPerNeuron = ba.take(2 * k + 2, LAYERSPEC);
 
-            layer(0) = si.bus(23);// si.bus(vars.N + (vars.N + 1) * nNeurons * wPerNeuron);
-            layer(j) = layers.dense(nNeurons, wPerNeuron, activationFunction),si.bus(nGrads)
-            with {
-                nGrads = 3;
-            };
-        })
-        : finalLayer
+        //     layer(0) = si.bus(23);// si.bus(vars.N + (vars.N + 1) * nNeurons * wPerNeuron);
+        //     layer(j) = layers.dense(nNeurons, wPerNeuron, activationFunction),si.bus(nGrads)
+        //     with {
+        //         nGrads = 3;
+        //     };
+        // })
+        // : finalLayer
         with {
             nSpec = ba.count(LAYERSPEC);
             nLayers = nSpec / 2;
