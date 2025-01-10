@@ -53,13 +53,12 @@ vars(V) = environment {
 
 // A friendly way of handling a differentiable recursion.
 // ngrads is the number of inputs available for passing in gradients.
-rec(F~G,ngrads) = (G,si.bus(n):F)~si.bus(m)
+rec(F ~ G, ngrads) = (G,si.bus(n) : F) ~ si.bus(m)
 with {
-    n = inputs(F)-outputs(G);
-    m = inputs(G)-ngrads;
+    n = inputs(F) - outputs(G);
+    m = inputs(G) - ngrads;
 };
 
-// Might not be the right name.
 backprop(groundTruth,learnable,lossFunction) = (
         route(nvars+nInputs, nvars+nInputs,
             // Route incoming gradients to learnable.
@@ -578,8 +577,9 @@ env(vars) = environment {
 
     // Helper division function.
     // Ensures that division by zero is avoided.
+    // TODO: what about negative y?
     div(x, y) = divi with {
-        divi = x, (y, ma.EPSILON : min) : /;
+        divi = x,(y, ma.EPSILON : max) : /;
     };
 
     // A differentiable (audio) input. Similar to a number.
@@ -625,18 +625,21 @@ env(vars) = environment {
 
     activations = environment {
         // Sigmoid activation function
-        // y = 1 / (1 + e^{-u})
+        // y = 1 / (1 + e^{-z})
         sigmoid = fwdAD(*(-1) : 1 / (1 + exp));
 
-        // tanh
-
         // ReLU
+        // y = max(0, z) = (z + |z|) / 2
+        relu = fwdAD(_ <: (_,abs) : + : /(2));
+
+        // TODO: Leaky ReLU, GELU, tanh, etc.
     };
 
-    layers = environment {
+    // paramStartIndex: starting parameter index.
+    layers(paramStartIndex) = environment {
         // Dense (or fully-connected) layer
         dense(nNeurons, wPerNeuron, activationFunction) = routeToNeurons
-            : par(n, nNeurons, neuron(wPerNeuron, activationFunction))
+            : par(n, nNeurons, neuron(n, wPerNeuron, activationFunction))
         with {
             // For each neuron, route:
             // _ a weight gradient
@@ -669,17 +672,28 @@ env(vars) = environment {
                 }
                 : par(n, nNeurons, par(w, wPerNeuron, _,diff(_)),_);
         };
+    } with {
+        // N: neuron index within layer.
+        neuron(N, NINPUTS, activationFunction) = Z : activationFunction
+        with {
+            WX = par(i, NINPUTS, vars.var(startIdx + i),diff(_) : diff(*));
+            b = vars.var(startIdx + NINPUTS);
+
+            Z = WX,b : sumall(NINPUTS + 1);
+
+            startIdx = paramStartIndex + N * (NINPUTS + 1) + 1;
+        };
     };
 
-    nn(LAYERSPEC, activationFunction) = inputLayer,si.bus(vars.N)
+    nn(LAYERSPEC, activationFunction) = routing : inputLayer,si.bus(vars.N)
         : seq(k, nLayers, layer(nLayers - k - 1)
         with {
             nNeurons = ba.take(2 * k + 1, LAYERSPEC);
             wPerNeuron = ba.take(2 * k + 2, LAYERSPEC);
 
-            // Don't iteratively make the final layer, just pass signals through.
+            // Don't iteratively make the output layer, just pass signals through.
             layer(0) = si.bus(nNeurons * wPerNeuron * (vars.N + 1) + nNeurons * (wPerNeuron + 1));
-            layer(j) = (layers.dense(nNeurons, wPerNeuron, activationFunction) <: si.bus(nextLayer.nInputs)),si.bus(nGrads)
+            layer(j) = (layers(idx).dense(nNeurons, wPerNeuron, activationFunction) <: si.bus(nextLayer.nInputs)),si.bus(nGrads)
             with {
                 nextLayer = environment {
                     nNeurons = ba.take(2 * k + 3, LAYERSPEC);
@@ -688,37 +702,40 @@ env(vars) = environment {
                 };
 
                 // Number of gradients to pass on to succeeding layers.
-                nGrads = vars.N - usedGrads
+                nGrads = vars.N - usedGrads;
+
+                usedGrads = sum(g, k + 1, nNeurons * (wPerNeuron + 1)
                 with {
-                    usedGrads = sum(g, k + 1, nNeurons * (wPerNeuron + 1)
-                    with {
-                        nNeurons = ba.take(2 * g + 1, LAYERSPEC);
-                        wPerNeuron = ba.take(2 * g + 2, LAYERSPEC);
-                    });
-                };
+                    nNeurons = ba.take(2 * g + 1, LAYERSPEC);
+                    wPerNeuron = ba.take(2 * g + 2, LAYERSPEC);
+                });
+
+                idx = usedGrads - nNeurons * (wPerNeuron + 1);
             };
         })
-        : finalLayer
+        : outputLayer
         with {
             // Number of entries in the layer specification.
             nSpec = ba.count(LAYERSPEC);
             // Number of layers, i.e. number of nNeurons,wPerNeuron pairs in the layer specification.
             nLayers = nSpec / 2;
+            // The number of inputs to the network is the product of the first pair of
+            // entries in LAYERSPEC, i.e. the number of neurons times the number of weights
+            // per neuron in the first layer.
+            nInputs = ba.take(1, LAYERSPEC) * ba.take(2, LAYERSPEC);
+
+            // Prior to the input layer, route inputs and gradients appropriately.
+            routing = ro.crossNM(vars.N, nInputs);
 
             // Transform inputs into differentiable inputs.
-            inputLayer = par(n, nInputs, input)
-            with {
-                // The number of inputs to the network is the product of the first pair of
-                // entries in LAYERSPEC, i.e. the number of neurons times the number of weights
-                // per neuron in the first layer.
-                nInputs = ba.take(1, LAYERSPEC) * ba.take(2, LAYERSPEC);
-            };
+            inputLayer = par(n, nInputs, input);
 
-            // Build a layer from the final two entries in LAYERSPEC.
-            finalLayer = layers.dense(nNeurons, wPerNeuron, activationFunction)
+            // Build an output layer from the final two entries in LAYERSPEC.
+            outputLayer = layers(idx).dense(nNeurons, wPerNeuron, activationFunction)
             with {
                 nNeurons = ba.take(nSpec - 1, LAYERSPEC);
                 wPerNeuron = ba.take(nSpec, LAYERSPEC);
+                idx = vars.N - nNeurons * (wPerNeuron + 1);
             };
         };
 
@@ -752,6 +769,28 @@ env(vars) = environment {
     //===========================Loss functions=================================
     //
     //==========================================================================
+
+    losses = environment {
+        L1 = lossFunction(abs);
+        L2 = lossFunction(^(2));
+
+        // spectral = environment {
+        //     L1 =
+        // };
+    } with {
+        lossFunction(function, windowSize, learningRate, y, yHat) = error,par(i,vars.N,_)
+            : window
+            : fwdAD(function)
+            : meter
+            : _,scaleGrads
+        with {
+            window = par(i, vars.N+1, ba.slidingMean(windowSize));
+            error = yHat,y : -;
+            meter = (_ <: attach(hbargraph("[100]loss",0.,.05))),
+                par(i, vars.N, _ <: attach(hbargraph("[101]gradient %i",-.5,.5)));
+            scaleGrads = par(i, vars.N, _,learningRate : *);
+        };
+    };
 
     // Stochastic gradient descent with time-domain L2 norm loss function
     learnMSE(windowSize, optimizer) =
