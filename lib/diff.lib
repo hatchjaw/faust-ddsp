@@ -12,6 +12,7 @@ declare author "Thomas Rushton; Advik Raj Basani";
 //==========================Variables of Interest===============================
 //
 //==============================================================================
+
 // vars(vars) = environment {
 //     N = outputs(vars);
 //     var(i) = ba.take(i,vars),pds(N,i)
@@ -19,7 +20,6 @@ declare author "Thomas Rushton; Advik Raj Basani";
 //         pds(N,i) = par(j,N,i-1==j);
 //     };
 // };
-
 
 // Possible to use pattern matching here?...
 var(meter, init) = -~_ : _,init : + <: attach(meter);
@@ -42,6 +42,17 @@ vars(V) = environment {
         };
     };
 };
+
+// TODO: properly randomise initial values.
+weightsAndBiases(LAYERSPEC) = vars(
+    par(i, outputs(LAYERSPEC) / 2,
+        par(j, ba.take(2 * i + 1, LAYERSPEC),
+            par(k, ba.take(2 * i + 2, LAYERSPEC),
+                df.var(hbargraph("[0] w%3i%3j%3k", -10, 10), sin((i+1)*(j+1)*(k+1)))
+            ),df.var(hbargraph("[1] b%3i%3j", -10, 10), sin((i+1)*(j+1)))
+        )
+    )
+);
 
 // A differentiable variable.
 // Returns a dual signal containing the variable and a vector of its partial derivatives.
@@ -577,9 +588,9 @@ env(vars) = environment {
 
     // Helper division function.
     // Ensures that division by zero is avoided.
-    // TODO: what about negative y?
     div(x, y) = divi with {
-        divi = x,(y, ma.EPSILON : max) : /;
+        // divi = x,(y, ma.EPSILON : max) : /;
+        divi = x,(y,(ma.EPSILON,-1*ma.EPSILON : select2(y < 0)) : select2(abs(y) < ma.EPSILON)) : /;
     };
 
     // A differentiable (audio) input. Similar to a number.
@@ -674,14 +685,14 @@ env(vars) = environment {
         };
     } with {
         // N: neuron index within layer.
-        neuron(N, NINPUTS, activationFunction) = Z : activationFunction
+        neuron(N, nWeights, activationFunction) = Z : activationFunction
         with {
-            WX = par(i, NINPUTS, vars.var(startIdx + i),diff(_) : diff(*));
-            b = vars.var(startIdx + NINPUTS);
+            WX = par(i, nWeights, vars.var(startIdx + i),diff(_) : diff(*));
+            b = vars.var(startIdx + nWeights);
 
-            Z = WX,b : sumall(NINPUTS + 1);
+            Z = WX,b : sumall(nWeights + 1);
 
-            startIdx = paramStartIndex + N * (NINPUTS + 1) + 1;
+            startIdx = paramStartIndex + N * (nWeights + 1) + 1;
         };
     };
 
@@ -787,7 +798,7 @@ env(vars) = environment {
             window = par(i, vars.N+1, ba.slidingMean(windowSize));
             error = yHat,y : -;
             meter = (_ <: attach(hbargraph("[100]loss",0.,.05))),
-                par(i, vars.N, _ <: attach(hbargraph("[101]gradient %i",-.5,.5)));
+                par(i, vars.N, _ <: attach(hbargraph("gradient%3i",-.5,.5)));
             scaleGrads = par(i, vars.N, _,learningRate : *);
         };
     };

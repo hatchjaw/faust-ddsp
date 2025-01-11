@@ -1501,7 +1501,10 @@ Mathematically speaking, we can expect $2N+2$ signals as a output from an FCL, a
 
 #### Example: Two+ FCs
 
-Let's take a more complex example -- this example deals with the creation of a binary classifier (0 and 1 only). While this example focuses on binary classification, the underlying principles can be extended to regression tasks. For instance, a binary classifier could be adapted to predict whether an input waveform is sinusoidal or square (view the working of the same here -- [fc-3.dsp](./examples/experiments/fc-3.dsp)). This will help us understand the core workings of the backpropagation algorithm in this library. We will utilize a neural network composed of three FCLs here. The first layer contains 2 neurons, the second layer contains 3 neuron and the final layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FCL to be $FC_{1}$, the second FCL to be $FC_{2}$ and the third FCL to be $FC_{3}$. The inputs for $FC_{1}$ are $x_{1}$ only. 
+Let's take a more complex example -- this example deals with the creation of a binary classifier (0 and 1 only). While this example focuses on binary 
+classification, the underlying principles can be extended to regression tasks. For instance, a binary classifier could be adapted to predict whether an 
+input waveform is sinusoidal or square (see [binary_classifier.dsp](./examples/experiments/binary_classifier.dsp)). This will 
+help us understand the core workings of the backpropagation algorithm in this library. We will utilize a neural network composed of three FCLs here. The first layer contains 2 neurons, the second layer contains 3 neuron and the final layer is the output layer, containing 1 neuron. From this diagram, let us assume the first FCL to be $FC_{1}$, the second FCL to be $FC_{2}$ and the third FCL to be $FC_{3}$. The inputs for $FC_{1}$ are $x_{1}$ only. 
 
 ![](./images/diff-threelayerfc.svg)
 
@@ -1628,7 +1631,8 @@ df.gradAveraging(N, n)
 Here, $N$ refers to the number of neurons in that FC, $n$ refers to the number of inputs in that FC.
 
 ### A Generalized Example
-Let's take up the example in [fc.dsp](./examples/experiments/fc.dsp) and [fc-3.dsp](./examples/experiments/fc-3.dsp). The comments in this example are extensive and should guide you throughout the process.
+Let's take up the example in [fc.dsp](./examples/experiments/fc.dsp) and [binary_classifier.dsp](./examples/experiments/binary_classifier.dsp). The comments in 
+this example are extensive and should guide you throughout the process.
 
 This segment of code is extremely generalized and you may add more layers / more backpropagation environment elements as needed.
 
@@ -1637,7 +1641,10 @@ This segment of code is extremely generalized and you may add more layers / more
 - Note the number of weights and biases each FC should take in. The recursion should be crafted appropriately.
 
 ### Bridging to a realistic example
-Using [fc-3.dsp](./examples/experiments/fc-3.dsp) as inspiration, we believe this example could serve as a foundation for generating a realistic dataset in another language, such as C++, and subsequently creating a functional neural network by integrating C++ with Faust. Additionally, this could be a stepping stone towards obtaining weights and biases and storing them in a file for offline inference.
+Using [binary_classifier.dsp](./examples/experiments/binary_classifier.dsp) as inspiration, we believe this example could serve as a foundation for 
+generating a 
+realistic 
+dataset in another language, such as C++, and subsequently creating a functional neural network by integrating C++ with Faust. Additionally, this could be a stepping stone towards obtaining weights and biases and storing them in a file for offline inference.
 
 ## Roadmap
 - Automatic parameter normalisation...
