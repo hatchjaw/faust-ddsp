@@ -1,16 +1,24 @@
 import("stdfaust.lib");
 df = library("diff.lib");
 
-// TODO: force learnable algo to respect RoC?
+// TODO: force estimate algo to respect RoC?
 
 NTAPS = 3;
 
-process = in <: _,_ : hgroup("Differentiable IIR", df.backprop(truth,learnable,d.learnMSE(1<<3,d.optimizers.SGD(alpha))))
-with{
-    alpha = hslider("alpha", 1e-3, 1e-4, 1e-1, 1e-5);
-    in = no.noise;
+// process = in <: _,_ : hgroup("Differentiable IIR", df.backprop(truth, estimate, d.learnMSE(1<<3, d.optimizers.SGD(alpha))))
+// with{
+//     alpha = hslider("alpha", 1e-3, 1e-4, 1e-1, 1e-5);
+//     in = no.noise;
 
-    truth = f : +~g
+process = in <: _,_
+    : hgroup("Differentiable IIR", df.backprop(target, estimate, d.losses.L2(1<<2, alpha)))
+    : route(3,4,(3,1),(3,2),(1,3),(2,4)) : par(i, 4, *(out))
+with {
+    out = hslider("Volume", 0, 0, 1, .01);
+    in = no.noise;
+    alpha = hslider("alpha [scale:log]", 1e-3, 1e-4, 1, 1e-8);
+
+    target = f : +~g
     with {
         f = bank(NTAPS,0);
         g = bank(NTAPS-1,1);
@@ -30,14 +38,11 @@ with{
 
     d = df.env(vars);
 
-    learnable = d.input,si.bus(vars.N) // A differentiable input, N gradients
+    estimate = d.input,si.bus(vars.N) // A differentiable input, N gradients
         // FIR bank, gradients for g
         : f,si.bus(NTAPS-1)
-        : route(nIN, nIN,
-            // Output and partial derivatives to h
-            par(n,vars.N+1,(n+1,n+1+NTAPS-1)),
-            // Gradients to g
-            par(n,NTAPS-1,(vars.N+n+2,n+1)))
+        // Output and partial derivatives to h; gradients to g.
+        : ro.crossNM(vars.N+1, NTAPS-1)
         with {
             nIN = 1+vars.N+NTAPS-1; // 1 output + N partial derivatives + NTAPS-1 gradients
         }
@@ -51,7 +56,7 @@ with{
             // N:      number of filter taps
             // offset: offset for the index of the differentiable parameter
             // isFB:   is this a feedforward (0) or a feedback (1) tap?
-            bank(0,offest,isFB) = d.diff(0);
+            bank(0,offset,isFB) = d.diff(0);
             bank(N,offset,isFB) =
                 route(vars.N+N+1,N*vars.N+2*N,
                     par(n,N,

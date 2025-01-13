@@ -96,9 +96,12 @@ paramOpt(target, estimate, lossFunction) = vgroup("[0]Target", target),_ : backp
 with {
     backprop(y) = (ro.crossNM(nvars, nInputs)
         : vgroup("[1]Estimate", estimate)
-        : vgroup("[2]Loss & Gradients", lossFunction(y))
-    ) ~ (!,si.bus(nvars))
-    : y,_,si.block(nvars);
+        : L
+    ) ~ (!,!,si.bus(nvars))
+    : y,_,_,si.block(nvars)
+    with {
+        L(yHat) = yHat,vgroup("[2]Loss & Gradients", lossFunction(y,yHat));
+    };
 
     nvars = inputs(estimate),inputs(target) : -;
     nInputs = inputs(target);
