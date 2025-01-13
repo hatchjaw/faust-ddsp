@@ -15,7 +15,6 @@ epoch_calculator = (_ ~ +(1)) : ((_ % 10000 == 0),0,1 : select2) <: +(_)~_, _
 
 // This is a dataset generator that generates 2 types of signals: sine wave and square wave.
 // It also generates a label (0 = sine wave, 1 = square wave) and a change_bit signal that changes the label every 10 epochs.
-// This is what we think the dataset should be like.
 // Outputs: label (0 = os.osc, 1 = os.square), sample, change_bit
 // In this case, the dataset consists of 1 sine wave of 440 Hz and 1 square wave of 440 Hz.
 dataset_generator(change_bit) = change_bit <: _, _
@@ -37,6 +36,6 @@ nn(y) = hgroup("Neural Network",
     vgroup("Weights & Biases", d.nn(LAYERSPEC, d.activations.sigmoid)) :> vgroup("Loss & Gradients", d.losses.L2(1<<3, 1e-2, y))
 ) ~ (!,si.bus(v.N)) : (y,_,si.block(v.N));
 
-// The process is the composition of the epoch_calculator, dataset_generator and ml_setup.
+// The process is the composition of the epoch_calculator, dataset_generator and the neural network.
 // This setup is used to visualise the weights and biases of the neural network.
 process = epoch_calculator : _,dataset_generator(_) : _,(_,_ : nn),_;

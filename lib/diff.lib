@@ -70,14 +70,10 @@ with {
     m = inputs(G) - ngrads;
 };
 
-backprop(groundTruth,learnable,lossFunction) = (
-        route(nvars+nInputs, nvars+nInputs,
-            // Route incoming gradients to learnable.
-            par(n, nvars, (n+1, n+1+nInputs)),
-            // Route input signals to groundTruth and learnable.
-            par(n, nInputs, (n+1+nvars, n+1))
-        )
-        : vgroup("Hidden", groundTruth),vgroup("Learned", learnable)
+backprop(target, estimate, lossFunction) = (
+        // Route gradients to estimate; route input signals to target and estimate.
+        ro.crossNM(nvars, nInputs)
+        : vgroup("Target", target),vgroup("Estimate", estimate)
         : route(2+nvars,4+nvars,
             // Route ground truth output to loss/gradient function and to output.
             (1,1),(1,nvars+3),
@@ -92,8 +88,20 @@ backprop(groundTruth,learnable,lossFunction) = (
         // Block the gradients, post-recursion.
     : _,si.block(nvars),_,_
 with {
-    nvars = inputs(learnable),inputs(groundTruth) : -;
-    nInputs = inputs(groundTruth),2 : *;
+    nvars = inputs(estimate),inputs(target) : -;
+    nInputs = inputs(target),2 : *;
+};
+
+paramOpt(target, estimate, lossFunction) = vgroup("[0]Target", target),_ : backprop
+with {
+    backprop(y) = (ro.crossNM(nvars, nInputs)
+        : vgroup("[1]Estimate", estimate)
+        : vgroup("[2]Loss & Gradients", lossFunction(y))
+    ) ~ (!,si.bus(nvars))
+    : y,_,si.block(nvars);
+
+    nvars = inputs(estimate),inputs(target) : -;
+    nInputs = inputs(target);
 };
 
 //========================Differentiable environment============================
@@ -102,8 +110,23 @@ with {
 
 env(vars) = environment {
     // Forward mode automatic differentiation.
+
+    // Automatically differentiate the circuit C in forward mode.
+    // Make all inputs differentiable.
     fwdADIn(C) = par(i, inputs(C), input) : fwdAD(C);
 
+    // Automatically differentiate the circuit C in forward mode.
+    // Make just the first N inputs differentiable; treat the rest as
+    // differentiable variables.
+    fwdADInN(C, N) = par(i, N, input),par(j, inputs(C) - N, diff(_)) : fwdAD(C);
+
+    // Automatically differentiate the circuit C in forward mode.
+    // Limitations:
+    // - It isn't possible to pattern-match lambda abstractions, so these cannot
+    //   be differentiated.
+    // - UI elements can only be pattern-matched on _all_ of their parameters,
+    //   so, for practical purposes, these aren't differentiable.
+    // - Similarly, the `route` primitive cannot be considered differentiable.
     fwdAD(C) = ad(C)
     with {
         ad(A ~ B) = ad(A) ~ ad(B);
@@ -1139,3 +1162,22 @@ backpropFC(N, n) = // Start off with routing the outputs of the previous backpro
             // This averages the gradients of the current FC. This is necessary for the backpropagation process.
             gradAveraging(N, n) = route(N*n, N*n, par(i, N+1, par(j, n, (j+i*N+1, i+1+j*n)))) : par(i, N, sum(j, n, _)) : par(i, N, /(n));
         };
+
+// More utilities...
+routes = environment {
+    // Differentiable analog to ro.interleave
+    //
+    // twotwo = _,_,_,_ <: _,!, _,!, !,_, !,_; // ro.interleave(2,2)
+    // twothree = _,_,_,_,_,_ <: _,!, _,!, _,!, !,_, !,_, !,_; // ro.interleave(2,3)
+    // threetwo = _,_,_,_,_,_ <: _,!,!, _,!,!, !,_,!, !,_,!, !,!,_, !,!,_; // ro.interleave(3,2)
+    // fourtwo = _,_,_,_,_,_,_,_ <: _,!,!,!, _,!,!,!, !,_,!,!, !,_,!,!, !,!,_,!, !,!,_,!, !,!,!,_, !,!,!,_; // 4,2
+    //
+    // In general, R*C groups of R signals.
+    // The rth signal in each of C subgroups passes; the rest are cut.
+    interleave(R, C) = si.bus(R * C) <: par(r, R, par(c, C, impl(r, R - r - 1)))
+    with {
+        impl(0, t) = _,par(q, t, !);
+        impl(s, 0) = par(q, s, !),_;
+        impl(s, t) = par(q, s, !),_,par(q, t, !);
+    };
+};
