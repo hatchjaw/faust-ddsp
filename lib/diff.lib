@@ -1,6 +1,5 @@
 si = library("signals.lib");
 ba = library("basics.lib");
-ro = library("routes.lib");
 ma = library("maths.lib");
 df = library("diff.lib");
 an = library("analyzers.lib");
@@ -72,7 +71,7 @@ with {
 
 backprop(target, estimate, lossFunction) = (
         // Route gradients to estimate; route input signals to target and estimate.
-        ro.crossNM(nvars, nInputs)
+        routes.crossNM(nvars, nInputs)
         : vgroup("Target", target),vgroup("Estimate", estimate)
         : route(2+nvars,4+nvars,
             // Route ground truth output to loss/gradient function and to output.
@@ -94,7 +93,7 @@ with {
 
 paramOpt(target, estimate, lossFunction) = vgroup("[0]Target", target),_ : backprop
 with {
-    backprop(y) = (ro.crossNM(nvars, nInputs)
+    backprop(y) = (routes.crossNM(nvars, nInputs)
         : vgroup("[1]Estimate", estimate)
         : L
     ) ~ (!,!,si.bus(nvars))
@@ -133,7 +132,16 @@ env(vars) = environment {
     fwdAD(C) = ad(C)
     with {
         ad(A ~ B) = ad(A) ~ ad(B);
-        ad(A :> B) = ad(A) : sumall(outputs(A)) : ad(B);
+        // This merge composition derivative makes explicit use of the sum iterator.
+        // ad(A :> B) = ad(A : routes.interleave(inputs(B), k) : par(p, inputs(B), sum(q, k, _)) : B)
+        // This merge composition derivative uses merge itself to produce the derivative.
+        ad(A :> B) = ad(A : routes.interleave(inputs(B), k))
+            : par(p, inputs(B), par(q, (1+vars.N)*k, _) :> par(r, 1+vars.N, _))
+            : ad(B)
+        with {
+            // k taken from /Syntactical and Semantical Aspects of Faust/ https://hal.science/hal-02159011
+            k = outputs(A) / inputs(B);
+        };
         ad(A <: B) = ad(A) <: ad(B);
         ad((A,B)) = ad(A),ad(B);
         ad(A : B) = ad(A) : ad(B);
@@ -144,13 +152,13 @@ env(vars) = environment {
     //
     //==========================================================================
 
-    // Derivative of the identity function.
+    // Differentiable identity function.
     // Returns nvars+1 parallel identity functions.
     diff(_) = par(i,vars.N+1,_);
 
-    // Derivative of the cut function.
-    // Returns the cut (basically nothing)
-    // <u, u'> = (! of u and ! of all partial derivatives)
+    // Differentiable cut function.
+    // Blocks everything. Useful for differentiable routing.
+    // <u, u'> = <!, !>
     diff(!) = par(i, vars.N+1, !);
 
     // Differentiable addition.
@@ -159,102 +167,51 @@ env(vars) = environment {
     // <u, u'> + <v, v'> = <u+v, u'+v'>
     diff(+) = diffadd
     with{
-        diffadd = route(nIN,nOUT,
-            (u,1),(v,2), // u + v
-            par(i,vars.N,
-                (u+i+1,dx),(v+i+1,dx+1) // du/dx_i + dv/dx_i
-                with {
-                    dx = 2*i+3; // Start of derivatives wrt ith var
-                }
-            )
-        )
-        with {
-            nIN = 2+2*vars.N;
-            nOUT = nIN;
-            u = 1;
-            v = u+vars.N+1;
-        }
-        : +,par(i, vars.N, +);
+        diffadd = routes.interleave(vars.N + 1, 2)
+            : +,par(i, vars.N, +);
     };
 
     // Differentiable subtraction.
     // <u, u'> - <v, v'> = <u-v, u'-v'>
     diff(-) = diffsub
     with {
-        diffsub = route(nIN,nOUT,
-            (u,1),(v,2), // u + v
-            par(i,vars.N,
-                (u+i+1,dx),(v+i+1,dx+1) // du/dx_i + dv/dx_i
-                with {
-                    dx = 2*i+3; // Start of derivatives wrt ith var
-                }
-            )
-        )
-        with {
-            nIN = 2+2*vars.N;
-            nOUT = nIN;
-            u = 1;
-            v = u+vars.N+1;
-        }
-        : -,par(i, vars.N, -);
+        diffsub = routes.interleave(vars.N + 1, 2)
+            : -,par(i, vars.N, -);
     };
 
     // Differentiable multiplication.
     // Takes two dual numbers as input;
     // returns the product and its partial derivatives.
-    // <u, u'> * <v, v'> = <u*v, u'*v + u*v'>
+    // <u, u'> * <v, v'> = <u*v, u'*v + v'*u>
     diff(*) = diffmul
     with {
-        diffmul = route(nIN,nOUT,
-            (u,1),(v,2), // u * v
-            par(i,vars.N,
-                (u,dx),(dvdx,dx+1),   // u * dv/dx_i
-                (dudx,dx+2),(v,dx+3)  // du/dx_i * v
-                with {
-                    dx = 4*i+3; // Start of derivatives wrt ith var
-                    dudx = u+i+1;
-                    dvdx = v+i+1;
-                }
-            )
-        )
-        with {
-            nIN = 2+2*vars.N;
-            nOUT = 2+4*vars.N;
-            u = 1;
-            v = u+vars.N+1;
-        }
-        : *,par(i, vars.N, *,* : +);
+        diffmul = interleavePDs
+            : *,par(i, vars.N, *,* : +);
     };
 
     // Differentiable division.
     // Takes two dual numbers as input;
     // returns the quotient and its partial derivatives.
-    // <u, u'> / <v, v'> = <u/v, (u'*v - u*v') / v^2>
-    diff(/) = diffdiv
+    // <u, u'> / <v, v'> = <u/v, (u'*v - v'*u) / v^2>
+    diff(/) = diffdiv2
     with {
-        diffdiv = route(nIN,nOUT,
-            (u,1),(v,2), // u / v
-            par(i,vars.N,
-                (dudx,dx),(v,dx+1),   // du/dx_i * v
-                (u,dx+2),(dvdx,dx+3)  // u * dv/dx_i
-                with {
-                    dx = 4*i+3; // Start of derivatives wrt ith var
-                    dudx = u+i+1;
-                    dvdx = v+i+1;
-                }
-            ),
-            (v,nOUT),(v,nOUT-1)       // v^2
-        )
-        with {
-            nIN = 2+2*vars.N;
-            nOUT = 2+4*vars.N+2;
-            u = 1;
-            v = u+vars.N+1;
-        }
-        : /,(par(i, vars.N, *,* : -),(*,1e-10 : max) // Prevent division by zero
-            // Divide all by v^2
-            : route(vars.N+1,vars.N*2,par(i,vars.N,(vars.N+1,2*i+2),(i+1,2*(i+1)-1)))
-            : par(i,vars.N, /));
+        diffdiv1 = si.bus(vars.N + 1),(_ <: _,_),si.bus(vars.N)
+            : si.bus(vars.N + 1),routes.crossNM(1, vars.N + 1)
+            : interleavePDs,(_ <: _,_ : * <: par(i, vars.N, _))
+            : /,(
+                (par(i, vars.N, *,* : -)),par(i, vars.N, _)
+                : routes.interleave(vars.N, 2)
+                : par(i, vars.N, /) //safediv)
+            );
+
+        diffdiv2 = interleavePDs
+            : /,par(i, vars.N,
+                _,(_ <: _,_),_,_
+                : _,_,routes.crossNM(1, 2)
+                : *,*,(_ <: *)
+                : -,_
+                : / //safediv
+            );
     };
 
     // Differentiable exponentiation
@@ -268,48 +225,18 @@ env(vars) = environment {
     //   var = -~_,1e-10 : + ...
     diff(^) = diffpow
     with {
-        diffpow = route(nIN,nOUT,
-            (u,1),(v,2),    // u^v
-            (u,3),(v,4),    // u^{v-1}
-            (u,5),          // u*ln(u)
-            (v,5+vars.N+1), // v
-            par(i,vars.N,(u+i+1,u+i+5),(v+i+1,v+i+5))
-        )
-        with {
-            nIN = 2+2*vars.N;
-            nOUT = 6+2*vars.N;
-            u = 1;
-            v = u+vars.N+1;
-        } : ^,pds
-        with {
-            pds = (_,-(1) : pow),                 // u^{v-1}
-                (_ <: _,log : *),                 // u*ln(u)
-                par(i,vars.N,_),_,par(i,vars.N,_) // du/dx,v,dvdx
-                : _,route(nIN,nOUT,
-                    par(i,vars.N,
-                        (dudx,dx),(v,dx+1),      // du/dx_i * v
-                        (ulnu,dx+2),(dvdx,dx+3)  // ln(u) * u * dv/dx_i
-                    with{
-                        dx = 4*i+1;
-                        dudx = ulnu+i+1;
-                        dvdx = v+i+1;
-                    })
-                )
-                with {
-                    nIN = 2+2*vars.N;
-                    nOUT = 4*vars.N;
-                    ulnu = 1;
-                    v = ulnu+vars.N+1;
-                }
-                : _,par(i,vars.N,*,* : +) // v*u' + ln(u)*u*v'
-                : route(1+vars.N,2*vars.N,par(i,vars.N,(1,2*i+1),(i+2,2*i+2)))
-                : par(i,vars.N,*);        // ...*u^{v-1}
-        };
+        diffpow = interleavePDs
+            : ^,par(i, vars.N,
+                _,(_ <: _,-(1)),(_ <: _,*(log)),_
+                : *,(routes.cross(2) : ^),*
+                : routes.cross(2),_
+                : _,+
+                : *
+            );
     };
 
     // Differentiable modulo function
-    // Takes a dual number as input;
-    // Returns the
+    // Takes a dual number as input...
 
     // Differentiable sine function
     // Takes a dual number as input;
@@ -317,8 +244,9 @@ env(vars) = environment {
     // sin(<u, u'>) = <sin(u), u'*cos(u)>
     diff(sin) = diffsin
     with {
-        diffsin = route(vars.N+1,2*vars.N+1,(1,1),par(i,vars.N,(1,2*(i+1)+1),(i+2,2*(i+1))))
-            : sin,par(i,vars.N, _,cos : *);
+        diffsin = (_ <: par(i, vars.N + 1, _)),par(i, vars.N, _)
+            : _,routes.interleave(vars.N, 2)
+            : sin,par(i, vars.N, cos,_ : *);
     };
 
     // Differentiable cosine function
@@ -327,8 +255,9 @@ env(vars) = environment {
     // cos(<u, u'>) = <cos(u), -u'*sin(u)>
     diff(cos) = diffcos
     with {
-        diffcos = route(vars.N+1,2*vars.N+1,(1,1),par(i,vars.N,(1,2*(i+1)+1),(i+2,2*(i+1))))
-            : cos,par(i,vars.N, _,sin : *,-1 : *);
+        diffcos = (_ <: par(i, vars.N + 1, _)),par(i, vars.N, _)
+            : _,routes.interleave(vars.N, 2)
+            : cos,par(i, vars.N, sin,*(-1) : *);
     };
 
     // tan(<u, u'>) = <tan(u), u'/cos^2(u)>
@@ -410,12 +339,13 @@ env(vars) = environment {
 
     // Differentiable exponential function
     // Takes a dual signal as input;
-    // Returns the exp of the input, and its derivative.
+    // Returns the exponential function applied to the primal input, and its derivatives.
     // exp(<u, u'>) = <exp(u), u'*exp(u)>
     diff(exp) = diffexp
     with {
-        diffexp = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
-            : exp, par(i, vars.N, _,exp : *);
+        diffexp = (_ <: par(i, vars.N + 1, _)),par(i, vars.N, _)
+            : _,routes.interleave(vars.N, 2)
+            : exp, par(i, vars.N, exp,_ : *);
     };
 
     // Differentiable base-e logarithm
@@ -425,8 +355,9 @@ env(vars) = environment {
     // TODO: use safediv
     diff(log) = difflog
     with {
-        difflog = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
-            : log, par(i, vars.N, /);
+        difflog = (_ <: par(i, vars.N + 1, _)),par(i, vars.N, _)
+            : _,(routes.crossNM(vars.N, vars.N) : routes.interleave(vars.N, 2))
+            : log,par(i, vars.N, /);
     };
 
     // Differentiable base-10 logarithm
@@ -533,7 +464,7 @@ env(vars) = environment {
 
     // Differentiable one-sample delay
     // <u, u'>[n-1] = <u[n-1], u'[n-1]>
-    diff(mem) = diffmem with{ diffmem = mem,par(i,vars.N,mem); };
+    diff(mem) = diffmem with{ diffmem = mem,par(i, vars.N, mem); };
 
     // Differentiable int cast... derivative should be nonzero for sin(pi*u) == 0
     // int(<u, u'>) = <int(u), d>
@@ -566,40 +497,16 @@ env(vars) = environment {
     //                    = u@v,u'@v,v',(u@v)'_n : _,_,* : _,-;
     diff(@) = diffdelay
     with {
-        diffdelay = route(nIN,nOUT,
-                (u,1),(v,2), // u, v
-                // (v,vars.N+3), // v
-                par(i,vars.N,
-                    (u+i+1,2*i+3),(v,2*i+4), // u'[n-v]
-                    (v+i+1,v+i+1+vars.N) // v'
-                ))
-            with {
-                nIN = 2+2*vars.N;
-                nOUT = nIN+vars.N;
-                u = 1;
-                v = u+vars.N+1;
-            }
-            : duv_dn,par(i,vars.N,delay),si.bus(vars.N) // u[n-v], (u[n-v])'_n, u'[n-v], v'
-            : _,route(nIN,nOUT,
-                par(i,vars.N,
-                    (1,i*3+3),
-                    (du+i,i*3+1),
-                    (dv+i,i*3+2)
-                )
-            )
-            with {
-                nIN = 1+2*vars.N;
-                nOUT = nIN+vars.N-1;
-                du = 2;
-                dv = vars.N+2;
-            }
-            : _,par(i,vars.N, _,* : -)
-        with {
-            duv_dn = (delay <: _,_,_' : _,-); // <= SHOULD BE CENTRE DIFF SOMEHOW?
-            delay = @;
-            // delay = de.fdelay(MAXDELAY);
-            MAXDELAY = 1<<24;
-        };
+        diffdelay = interleavePDs
+            : @,par(n, vars.N,
+                _,(_ <: _,_),_,_
+                // : @,routes.cross(2),_
+                // : _,(@ <: _,mem),_
+                // : _,-,_
+                // : _,*
+                // : -
+                : @ - (routes.cross(2) : @ <: _,mem : -)*_
+            );
     };
 
     //======================Differentiable utilities============================
@@ -729,6 +636,7 @@ env(vars) = environment {
             wPerNeuron = ba.take(2 * k + 2, LAYERSPEC);
 
             // Don't iteratively make the output layer, just pass signals through.
+            // NB. layers are numbered in descending order.
             layer(0) = si.bus(nNeurons * wPerNeuron * (vars.N + 1) + nNeurons * (wPerNeuron + 1));
             layer(j) = (layers(idx).dense(nNeurons, wPerNeuron, activationFunction) <: si.bus(nextLayer.nInputs)),si.bus(nGrads)
             with {
@@ -762,7 +670,7 @@ env(vars) = environment {
             nInputs = ba.take(1, LAYERSPEC) * ba.take(2, LAYERSPEC);
 
             // Prior to the input layer, route inputs and gradients appropriately.
-            routing = ro.crossNM(vars.N, nInputs);
+            routing = routes.crossNM(vars.N, nInputs);
 
             // Transform inputs into differentiable inputs.
             inputLayer = par(n, nInputs, input);
@@ -835,7 +743,7 @@ env(vars) = environment {
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
         // (Is cross necessary?)
-        : (ro.cross(2) : - ),pds
+        : (routes.cross(2) : - ),pds
         // Calculate loss (this is just for show, since there's no sensitivity threshold)
         : (_ <: loss,_),pds
         // Calculate gradients
@@ -865,7 +773,7 @@ env(vars) = environment {
         // Calculate the difference between the ground truth and learnable outputs
         // (Is cross necessary?)
         : _, (_ <: _, _), par(i, vars.N, _)
-        : (ro.cross(2) : ((_, 1 : +) : log), ((_, 1 : +) : log) : -),_,pds
+        : (routes.cross(2) : ((_, 1 : +) : log), ((_, 1 : +) : log) : -),_,pds
         // Calculate loss (this is just for show, since there's no sensitivity threshold)
         : (_ <: loss,_),(_, 1 : +),pds
         // Calculate gradients
@@ -894,7 +802,7 @@ env(vars) = environment {
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
         // (Is cross necessary?)
-        : (ro.cross(2) : -),pds
+        : (routes.cross(2) : -),pds
         // Calculate loss (this is just for show, since there's no sensitivity threshold)
         : (_ <: loss,_),pds
         // Calculate gradients
@@ -922,7 +830,7 @@ env(vars) = environment {
         // Window the input signals
         par(n,2+vars.N,window)
         // Calculate the difference between the ground truth and learnable outputs
-        : (ro.cross(2) : - ),pds
+        : (routes.cross(2) : - ),pds
         // Calculate loss (this is just for show, since there's no sensitivity threshold)
         : (_ <: loss,_),pds
         // Calculate gradients
@@ -1008,6 +916,27 @@ env(vars) = environment {
         routeall = _,si.bus(vars.N)
             : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
     };
+} with {
+    // Prepare signals for computation for derivatives of the form u'v + v'u.
+    // See diffmul, diffdiv, diffdelay.
+    interleavePDs =
+        // Duplicate u and v for primal computation.
+        par(j, 2, (_ <: _,_),si.bus(vars.N))
+        // Move a copy of v where it can easily be combined with a copy of u.
+        // Move u after its partial derivatives.
+        : _,routes.swapOuter(vars.N + 2),si.bus(vars.N+1)
+        : _,_,(
+            // Split u and v. Result: du1,...,duN, u,...,u, v,...,v, dv1,...,dvN
+            si.bus(vars.N),(_ <: si.bus(vars.N)),(_ <: si.bus(vars.N)),si.bus(vars.N)
+            // Interleave u and v separately. Result: du1,u,...duN,u, v,dv1,...,v,dvN
+            : par(i, 2, routes.interleave(vars.N, 2))
+            // Interleave u and v together. Result: du1,v,u,dv1,...,duN,v,u,dvN
+            : routes.interleave(2*vars.N, 2)
+        );
+
+    // Avoid division by zero.
+    // This uses a lambda abstraction and isn't differentiable.
+    safediv(x, y) = x,(y,(ma.EPSILON,-1*ma.EPSILON : select2(y < 0)) : select2(abs(y) < ma.EPSILON)) : /;
 };
 
 //===========================Activation Functions===========================
@@ -1067,7 +996,7 @@ bias(learningRate) = *(learningRate) : -~_ <: attach(hbargraph("bias", -1, 1));
 neuron(N, activation, learningRate) = cross : update_params : act : grad_route(N)
     with {
         // Appropriately routing the signals
-        cross = ro.cross(2*N+1) : ro.cross(N), _, ro.cross(N)
+        cross = routes.cross(2*N+1) : routes.cross(N), _, routes.cross(N)
             : par(i, N, _), route(N+1, N+1, par(i, N, (i+2, i+1)), (1,N+1));
 
         // Recursively updating the weights and biases
@@ -1087,7 +1016,7 @@ neuron(N, activation, learningRate) = cross : update_params : act : grad_route(N
             };
 
         // Reset the routes -- making the signals ready for the gradient calculation
-        grad_route(N) = _,ro.cross(2*N),_ : _,ro.cross(N),ro.cross(N),_
+        grad_route(N) = _,routes.cross(2*N),_ : _,routes.cross(N),routes.cross(N),_
                     : _,par(i, N, _),route(N+1, N+1, (N+1, 1), par(i, N, (i+1, i+2)));
     };
 
@@ -1177,10 +1106,28 @@ routes = environment {
     //
     // In general, R*C groups of R signals.
     // The rth signal in each of C subgroups passes; the rest are cut.
-    interleave(R, C) = si.bus(R * C) <: par(r, R, par(c, C, impl(r, R - r - 1)))
-    with {
-        impl(0, t) = _,par(q, t, !);
-        impl(s, 0) = par(q, s, !),_;
-        impl(s, t) = par(q, s, !),_,par(q, t, !);
-    };
+    interleave(1, C) = par(i, C, _);
+    interleave(R, C) = par(i, R * C, _) <: par(r, R, par(c, C, distribute(r, 1, R - r -1)));
+
+    // Differentiable cross
+    cross(0) = distribute(0, 0, 0);
+    cross(n) = par(i, n, _) <: par(i, n, distribute(n - i - 1, 1, i));
+
+    // Differentiable crossNM
+    crossNM(n, m) = par(i, n + m, _) <: distribute(n, n + m, m);
+
+    // Swap the first and nth of n signals. Equivalent to `route(n, n, 1, n, 2, 2, ..., n, 1)`
+    swapOuter(0) = distribute(0, 0, 0);
+    swapOuter(1) = distribute(0, 1, 0);
+    swapOuter(2) = cross(2);
+    swapOuter(n) = par(i, n, _) <: distribute(n - 1, 1, 0),par(i, n-2, distribute(i + 1, 1, n - 2 - i)),distribute(0, 1, n - 1);
+} with {
+    // Helper function for distributing groups of signals.
+    // p: number of signals to cut at the start of the group.
+    // q: number of signals to pass.
+    // r: number of signals to cut at the end of the group.
+    distribute(0, q, 0) = par(i, q, _);
+    distribute(p, q, 0) = par(i, p, !),par(j, q, _);
+    distribute(0, q, r) = par(i, q, _),par(j, r, !);
+    distribute(p, q, r) = par(i, p, !),par(j, q, _),par(k, r, !);
 };
