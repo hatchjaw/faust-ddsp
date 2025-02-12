@@ -73,14 +73,8 @@ backprop(target, estimate, lossFunction) = (
         // Route gradients to estimate; route input signals to target and estimate.
         routes.crossNM(nvars, nInputs)
         : vgroup("Target", target),vgroup("Estimate", estimate)
-        : route(2+nvars,4+nvars,
-            // Route ground truth output to loss/gradient function and to output.
-            (1,1),(1,nvars+3),
-            // Route learnable output to loss/gradient function and to output.
-            (2,2),(2,nvars+4),
-            // Route gradients to loss/gradient function.
-            par(n,nvars,(n+3,n+3))
-        )
+        // Duplicate target and estimate output.
+        : routes.splitCrossDown(2+nvars, 2)
         : vgroup("[1]Loss/gradient", lossFunction,_,_)
         // Feed the gradients back.
         ) ~ (!,si.bus(nvars))
@@ -156,7 +150,7 @@ env(vars) = environment {
     // Returns nvars+1 parallel identity functions.
     diff(_) = par(i,vars.N+1,_);
 
-    // Differentiable cut function.
+    // Differentiable cut primitive.
     // Blocks everything. Useful for differentiable routing.
     // <u, u'> = <!, !>
     diff(!) = par(i, vars.N+1, !);
@@ -185,7 +179,7 @@ env(vars) = environment {
     // <u, u'> * <v, v'> = <u*v, u'*v + v'*u>
     diff(*) = diffmul
     with {
-        diffmul = interleavePDs
+        diffmul = interleaveBinary
             : *,par(i, vars.N, *,* : +);
     };
 
@@ -197,14 +191,14 @@ env(vars) = environment {
     with {
         diffdiv1 = si.bus(vars.N + 1),(_ <: _,_),si.bus(vars.N)
             : si.bus(vars.N + 1),routes.crossNM(1, vars.N + 1)
-            : interleavePDs,(_ <: _,_ : * <: par(i, vars.N, _))
+            : interleaveBinary,(_ <: _,_ : * <: par(i, vars.N, _))
             : /,(
                 (par(i, vars.N, *,* : -)),par(i, vars.N, _)
                 : routes.interleave(vars.N, 2)
                 : par(i, vars.N, /) //safediv)
             );
 
-        diffdiv2 = interleavePDs
+        diffdiv2 = interleaveBinary
             : /,par(i, vars.N,
                 _,(_ <: _,_),_,_
                 : _,_,routes.crossNM(1, 2)
@@ -225,7 +219,7 @@ env(vars) = environment {
     //   var = -~_,1e-10 : + ...
     diff(^) = diffpow
     with {
-        diffpow = interleavePDs
+        diffpow = interleaveBinary
             : ^,par(i, vars.N,
                 _,(_ <: _,-(1)),(_ <: _,*(log)),_
                 : *,(routes.cross(2) : ^),*
@@ -244,9 +238,7 @@ env(vars) = environment {
     // sin(<u, u'>) = <sin(u), u'*cos(u)>
     diff(sin) = diffsin
     with {
-        diffsin = (_ <: par(i, vars.N + 1, _)),par(i, vars.N, _)
-            : _,routes.interleave(vars.N, 2)
-            : sin,par(i, vars.N, cos,_ : *);
+        diffsin = interleaveUnary : sin,par(i, vars.N, _,cos : *);
     };
 
     // Differentiable cosine function
@@ -255,17 +247,13 @@ env(vars) = environment {
     // cos(<u, u'>) = <cos(u), -u'*sin(u)>
     diff(cos) = diffcos
     with {
-        diffcos = (_ <: par(i, vars.N + 1, _)),par(i, vars.N, _)
-            : _,routes.interleave(vars.N, 2)
-            : cos,par(i, vars.N, sin,*(-1) : *);
+        diffcos = interleaveUnary : cos,par(i, vars.N, *(-1),sin : *);
     };
 
     // tan(<u, u'>) = <tan(u), u'/cos^2(u)>
     diff(tan) = difftan
     with {
-        difftan = route(vars.N+1,2*vars.N+1,(1,1),par(i,vars.N,(1,2*(i+1)+1),(i+2,2*(i+1))))
-                                // Prevent division by zero
-            : tan,par(i,vars.N, _,((cos <: *),1e-10 : max) : /);
+        difftan = interleaveUnary : tan,par(i, vars.N, _,(cos <: *) : /);
     };
 
     // Differentiable asine function
@@ -274,8 +262,7 @@ env(vars) = environment {
     // asin(<u, u'>) = <asin(u), u'/sqrt(1 - u^2)>
     diff(asin) = diffasin
     with {
-        diffasin = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
-            : asin, par(i, vars.N, _, (((1, (_ <: *) : -) : sqrt), 1e-10 : max) : /);
+        diffasin = interleaveUnary : asin,par(i, vars.N, _,sqrt(1 - (_ <: *)) : /);
     };
 
     // Differentiable acosine function
@@ -284,8 +271,7 @@ env(vars) = environment {
     // acos(<u, u'>) = <acos(u), -u'/sqrt(1 - u^2)>
     diff(acos) = diffacos
     with {
-        diffacos = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
-            : acos, par(i, vars.N, _, (((1, (_ <: *) : -) : sqrt), 1e-10 : max) : / : *(-1));
+        diffacos = interleaveUnary : acos,par(i, vars.N, _*(-1),sqrt(1 - (_ <: *)) : /);
     };
 
     // Differentiable atan function
@@ -294,8 +280,7 @@ env(vars) = environment {
     // atan(<u, u'>) = <atan(u), u'/(1 + u^2)>
     diff(atan) = diffatan
     with {
-        diffatan = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
-            : atan, par(i, vars.N, _, (1, (_ <: *) : +) : /);
+        diffatan = interleaveUnary : atan,par(i, vars.N, _,1 + (_ <: *) : /);
     };
 
     // Differentiable atan2 function
@@ -343,9 +328,7 @@ env(vars) = environment {
     // exp(<u, u'>) = <exp(u), u'*exp(u)>
     diff(exp) = diffexp
     with {
-        diffexp = (_ <: par(i, vars.N + 1, _)),par(i, vars.N, _)
-            : _,routes.interleave(vars.N, 2)
-            : exp, par(i, vars.N, exp,_ : *);
+        diffexp = interleaveUnary : exp, par(i, vars.N, _,exp : *);
     };
 
     // Differentiable base-e logarithm
@@ -355,9 +338,7 @@ env(vars) = environment {
     // TODO: use safediv
     diff(log) = difflog
     with {
-        difflog = (_ <: par(i, vars.N + 1, _)),par(i, vars.N, _)
-            : _,(routes.crossNM(vars.N, vars.N) : routes.interleave(vars.N, 2))
-            : log,par(i, vars.N, /);
+        difflog = interleaveUnary : log,par(i, vars.N, /);
     };
 
     // Differentiable base-10 logarithm
@@ -367,8 +348,7 @@ env(vars) = environment {
     // TODO: use safediv
     diff(log10) = difflog10
     with {
-        difflog10 = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
-            : log10, par(i, vars.N, _,*(log(10)) : /);
+        difflog10 = interleaveUnary : log10,par(i, vars.N, _,*(log(10)) : /);
     };
 
     // Differentiable square root
@@ -379,8 +359,7 @@ env(vars) = environment {
     // sqrt(<u, u'>) = <sqrt(u), u'/(2*sqrt(u))>
     diff(sqrt) = diffsqrt
     with {
-        diffsqrt = route(vars.N+1, 2*vars.N+1, (1,1), par(i,vars.N, (1,2*(i+1)+1), (i+2,2*(i+1))))
-            : sqrt, par(i, vars.N, _,(sqrt,2 : *) : div);
+        diffsqrt = interleaveUnary : sqrt,par(i, vars.N, _,2*sqrt : /);
     };
 
     // Differentiable absolute value function
@@ -391,8 +370,7 @@ env(vars) = environment {
     // abs(<u, u'>) = <abs(u), u'*u/abs(u)>
     diff(abs) = diffabs
     with {
-        diffabs = route(vars.N+1, 3*vars.N+1, (1, 1), par(i,vars.N, (1, 3*i+3), (1, 3*i+4), (i+2, 3*i+2)))
-            : abs,par(i, vars.N, _,_,abs : _,div : *);
+        diffabs = interleaveUnary : abs,par(i, vars.N, _,(_ <: _,abs : /) : *);
     };
 
     // Differentiable min function
@@ -497,7 +475,7 @@ env(vars) = environment {
     //                    = u@v,u'@v,v',(u@v)'_n : _,_,* : _,-;
     diff(@) = diffdelay
     with {
-        diffdelay = interleavePDs
+        diffdelay = interleaveBinary
             : @,par(n, vars.N,
                 _,(_ <: _,_),_,_
                 // : @,routes.cross(2),_
@@ -917,9 +895,12 @@ env(vars) = environment {
             : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
     };
 } with {
-    // Prepare signals for computation for derivatives of the form u'v + v'u.
+    interleaveUnary = (_ <: par(i, vars.N + 1, _)),par(i, vars.N, _)
+        : _,routes.outerleave(vars.N, 2);
+
+    // Prepare signals for computation for derivatives of the form u'v · v'u.
     // See diffmul, diffdiv, diffdelay.
-    interleavePDs =
+    interleaveBinary =
         // Duplicate u and v for primal computation.
         par(j, 2, (_ <: _,_),si.bus(vars.N))
         // Move a copy of v where it can easily be combined with a copy of u.
@@ -1098,6 +1079,7 @@ backpropFC(N, n) = // Start off with routing the outputs of the previous backpro
 // More utilities...
 routes = environment {
     // Differentiable analog to ro.interleave
+    // interleave(2, 2) Maps input signals 1,2,3,4 to 1,3,2,4
     //
     // twotwo = _,_,_,_ <: _,!, _,!, !,_, !,_; // ro.interleave(2,2)
     // twothree = _,_,_,_,_,_ <: _,!, _,!, _,!, !,_, !,_, !,_; // ro.interleave(2,3)
@@ -1107,7 +1089,12 @@ routes = environment {
     // In general, R*C groups of R signals.
     // The rth signal in each of C subgroups passes; the rest are cut.
     interleave(1, C) = par(i, C, _);
-    interleave(R, C) = par(i, R * C, _) <: par(r, R, par(c, C, distribute(r, 1, R - r -1)));
+    interleave(R, C) = par(i, R * C, _) <: par(r, R, par(c, C, distribute(r, 1, R - r - 1)));
+
+    // outerleave(2, 2) Maps input signals 1,2,3,4 to 3,1,4,2
+    // R*C groups of R*C-(R-1) signals, in R subgroups.
+    outerleave(R, C) = par(i, R * C, _) <:
+        par(r, R, par(c, C, distribute((R - r) * (C - 1) - c, 1, c + r * (C - 1))));
 
     // Differentiable cross
     cross(0) = distribute(0, 0, 0);
@@ -1121,6 +1108,10 @@ routes = environment {
     swapOuter(1) = distribute(0, 1, 0);
     swapOuter(2) = cross(2);
     swapOuter(n) = par(i, n, _) <: distribute(n - 1, 1, 0),par(i, n-2, distribute(i + 1, 1, n - 2 - i)),distribute(0, 1, n - 1);
+
+    // Duplicate some signals and move the duplicates to the bottom.
+    splitCrossDown(n, nSplit) = (par(i, nSplit, _ <: _,_) : interleave(2, nSplit)),par(i, n - nSplit, _)
+        : crossNM(nSplit, n);
 } with {
     // Helper function for distributing groups of signals.
     // p: number of signals to cut at the start of the group.
