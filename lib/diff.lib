@@ -163,6 +163,8 @@ env(vars) = environment {
     with{
         diffadd = routes.interleave(vars.N + 1, 2)
             : +,par(i, vars.N, +);
+
+        diffadd2 = binary(+, (_,!,!,_ : +));
     };
 
     // Differentiable subtraction.
@@ -171,41 +173,28 @@ env(vars) = environment {
     with {
         diffsub = routes.interleave(vars.N + 1, 2)
             : -,par(i, vars.N, -);
+
+        diffsub2 = binary(-, (_,!,!,_ : -));
     };
 
     // Differentiable multiplication.
     // Takes two dual numbers as input;
     // returns the product and its partial derivatives.
     // <u, u'> * <v, v'> = <u*v, u'*v + v'*u>
-    diff(*) = diffmul
-    with {
-        diffmul = interleaveBinary
-            : *,par(i, vars.N, *,* : +);
-    };
+    diff(*) = diffmul with { diffmul = binary(*, (*,* : +)); };
 
     // Differentiable division.
     // Takes two dual numbers as input;
     // returns the quotient and its partial derivatives.
     // <u, u'> / <v, v'> = <u/v, (u'*v - v'*u) / v^2>
-    diff(/) = diffdiv2
+    diff(/) = diffdiv
     with {
-        diffdiv1 = si.bus(vars.N + 1),(_ <: _,_),si.bus(vars.N)
-            : si.bus(vars.N + 1),routes.crossNM(1, vars.N + 1)
-            : interleaveBinary,(_ <: _,_ : * <: par(i, vars.N, _))
-            : /,(
-                (par(i, vars.N, *,* : -)),par(i, vars.N, _)
-                : routes.interleave(vars.N, 2)
-                : par(i, vars.N, /) //safediv)
-            );
-
-        diffdiv2 = interleaveBinary
-            : /,par(i, vars.N,
-                _,(_ <: _,_),_,_
+        diffdiv = binary(/, (_,(_ <: _,_),_,_
                 : _,_,routes.crossNM(1, 2)
                 : *,*,(_ <: *)
                 : -,_
                 : / //safediv
-            );
+        ));
     };
 
     // Differentiable exponentiation
@@ -217,17 +206,13 @@ env(vars) = environment {
     // NB. due to the presence of the natural log, may require that a differentiable
     // variable never equals exactly zero, e.g.
     //   var = -~_,1e-10 : + ...
-    diff(^) = diffpow
-    with {
-        diffpow = interleaveBinary
-            : ^,par(i, vars.N,
-                _,(_ <: _,-(1)),(_ <: _,*(log)),_
-                : *,(routes.cross(2) : ^),*
-                : routes.cross(2),_
-                : _,+
-                : *
-            );
-    };
+    diff(^) = diffpow with { diffpow = binary(^, (
+        _,(_ <: _,-(1)),(_ <: _,*(log)),_
+        : *,(routes.cross(2) : ^),*
+        : routes.cross(2),_
+        : _,+
+        : *
+    )); };
 
     // Differentiable modulo function
     // Takes a dual number as input...
@@ -236,120 +221,66 @@ env(vars) = environment {
     // Takes a dual number as input;
     // Returns the sine of the input, and its partial derivatives.
     // sin(<u, u'>) = <sin(u), u'*cos(u)>
-    diff(sin) = diffsin
-    with {
-        diffsin = interleaveUnary : sin,par(i, vars.N, _,cos : *);
-    };
+    diff(sin) = diffsin with { diffsin = unary(sin, (_,cos : *)); };
 
     // Differentiable cosine function
     // Takes a dual number as input;
     // Returns the cosine of the input, and its derivative.
     // cos(<u, u'>) = <cos(u), -u'*sin(u)>
-    diff(cos) = diffcos
-    with {
-        diffcos = interleaveUnary : cos,par(i, vars.N, *(-1),sin : *);
-    };
+    diff(cos) = diffcos with { diffcos = unary(cos, (*(-1),sin : *)); };
 
     // tan(<u, u'>) = <tan(u), u'/cos^2(u)>
-    diff(tan) = difftan
-    with {
-        difftan = interleaveUnary : tan,par(i, vars.N, _,(cos <: *) : /);
-    };
+    diff(tan) = difftan with { difftan = unary(tan, (_,(cos <: *) : /)); };
 
     // Differentiable asine function
     // Takes a dual number as input;
     // Returns the asine of the input, and its derivative.
     // asin(<u, u'>) = <asin(u), u'/sqrt(1 - u^2)>
-    diff(asin) = diffasin
-    with {
-        diffasin = interleaveUnary : asin,par(i, vars.N, _,sqrt(1 - (_ <: *)) : /);
-    };
+    diff(asin) = diffasin with { diffasin = unary(asin, (_,sqrt(1 - (_ <: *)) : /)); };
 
     // Differentiable acosine function
     // Takes a dual number as input;
     // Returns the acosine of the input, and its derivative.
     // acos(<u, u'>) = <acos(u), -u'/sqrt(1 - u^2)>
-    diff(acos) = diffacos
-    with {
-        diffacos = interleaveUnary : acos,par(i, vars.N, _*(-1),sqrt(1 - (_ <: *)) : /);
-    };
+    diff(acos) = diffacos with { diffacos = unary(acos, (*(-1),sqrt(1 - (_ <: *)) : /)); };
 
     // Differentiable atan function
     // Takes a dual number as input;
     // Returns the atan of the input, and its derivative.
     // atan(<u, u'>) = <atan(u), u'/(1 + u^2)>
-    diff(atan) = diffatan
-    with {
-        diffatan = interleaveUnary : atan,par(i, vars.N, _,1 + (_ <: *) : /);
-    };
+    diff(atan) = diffatan with { diffatan = unary(atan, (_,1 + (_ <: *) : /)); };
 
     // Differentiable atan2 function
     // Takes a dual number as input;
     // Returns the atan2 of the input, and its derivative.
-    // atan2(<u, u'>, <v, v'>) = <atan(u, v), (u'v + v'u) / (u^2 + v^2)>
-    diff(atan2) = diffatan2
-    with {
-        diffatan2 = route(2*(vars.N+1), 2*(vars.N+1), (1,1), (vars.N+2,2), par(i, vars.N, ((i+2),(i+3))),
-            par(i, vars.N, ((i+vars.N+3),(i+vars.N+3))))
-            : route(2*(vars.N+1), (4*vars.N)+2, (1,1), (2,2),
-                par(i, vars.N, (i+3,dx), (2,dx + 1)
-                    with {
-                        dx = 2*i+3;
-                    }
-                ),
-                par(i, vars.N, (i+vars.N+3,dx+(2*(vars.N) + 3)), (1,dx+(2*(vars.N) + 4))
-                    with {
-                        dx = 2*i;
-                    }
-                )
-            )
-            : _,_,par(i, 2*vars.N, _,_ : *)
-            : route(2*(vars.N+1), 2*(vars.N+2), (1,1), (1,3), (2,2), (2,4),
-                par(i, vars.N, (i+3,dx), (i+vars.N+3,dx+1)
-                    with {
-                        dx = 2*i+5;
-                    }
-                )
-            )
-            : atan2, ((_ <: *),(_ <: *) : +), par(i, vars.N, -)
-            : route(vars.N+2, 1+2*vars.N, (1,1),
-                par(i, vars.N, (i+3,dx), (2,dx+1)
-                    with {
-                        dx = 2*i+2;
-                    }
-                )
-            )
-            : _,par(i, vars.N, /);
-    };
+    // atan2(<u, u'>, <v, v'>) = <atan(u, v), (u'v - v'u) / (u^2 + v^2)>
+    diff(atan2) = diffatan2 with { diffatan2 = binary(atan2, (
+        _,(_ <: _,_),(_ <: _,_),_
+        : _,_,routes.crossNM(2, 2)
+        : *,*,(_ <: *),(_ <: *)
+        : -,+
+        : / //safediv
+    )); };
 
     // Differentiable exponential function
     // Takes a dual signal as input;
     // Returns the exponential function applied to the primal input, and its derivatives.
     // exp(<u, u'>) = <exp(u), u'*exp(u)>
-    diff(exp) = diffexp
-    with {
-        diffexp = interleaveUnary : exp, par(i, vars.N, _,exp : *);
-    };
+    diff(exp) = diffexp with { diffexp = unary(exp, (_,exp : *)); };
 
     // Differentiable base-e logarithm
     // Takes a dual number as input;
     // Returns the log of the input, and its derivative.
     // log(<u, u'>) = <log(u), u'/u>
     // TODO: use safediv
-    diff(log) = difflog
-    with {
-        difflog = interleaveUnary : log,par(i, vars.N, /);
-    };
+    diff(log) = difflog with { difflog = unary(log, /); };
 
     // Differentiable base-10 logarithm
     // Takes a dual number as input;
     // Returns the log of the input, and its derivative.
     // log10(<u, u'>) = <log10(u), u'/(ln(10)*u)>
     // TODO: use safediv
-    diff(log10) = difflog10
-    with {
-        difflog10 = interleaveUnary : log10,par(i, vars.N, _,*(log(10)) : /);
-    };
+    diff(log10) = difflog10 with { difflog10 = unary(log10, (_,*(log(10)) : /)); };
 
     // Differentiable square root
     // Takes a dual number as input;
@@ -357,10 +288,7 @@ env(vars) = environment {
     //   Primal: the square root of the input.
     //   Tangents: partial derivatives of the square root operation.
     // sqrt(<u, u'>) = <sqrt(u), u'/(2*sqrt(u))>
-    diff(sqrt) = diffsqrt
-    with {
-        diffsqrt = interleaveUnary : sqrt,par(i, vars.N, _,2*sqrt : /);
-    };
+    diff(sqrt) = diffsqrt with { diffsqrt = unary(sqrt, (_,2*sqrt : /)); };
 
     // Differentiable absolute value function
     // Takes a dual number as input;
@@ -368,10 +296,7 @@ env(vars) = environment {
     //   Primal: the absolute value of the input.
     //   Tangents: partial derivatives of the absolute value of the input.
     // abs(<u, u'>) = <abs(u), u'*u/abs(u)>
-    diff(abs) = diffabs
-    with {
-        diffabs = interleaveUnary : abs,par(i, vars.N, _,(_ <: _,abs : /) : *);
-    };
+    diff(abs) = diffabs with { diffabs = unary(abs, (_,(_ <: _,abs : positiveSafediv) : *)); };
 
     // Differentiable min function
     // Takes a dual number as input;
@@ -427,22 +352,15 @@ env(vars) = environment {
             : _,par(i, vars.N, select2);
     };
 
-
-    // Differentiable floor function
-    // Takes a dual number as input;
-    // Returns the floor of the input, and its derivative.
     // floor(<u, u'>) = <floor(u), u'>
-    diff(floor) = floor, par(i, vars.N, _);
+    diff(floor) = difffloor with { difffloor = floor,par(i, vars.N, _); };
 
-    // Differentiable ceil function
-    // Takes a dual number as input;
-    // Returns the ceil of the input, and its derivative
     // ceil(<u, u'>) = <ceil(u), u'>
-    diff(ceil) =  ceil, par(i, vars.N, _);
+    diff(ceil) = diffceil with { diffceil = ceil,par(i, vars.N, _); };
 
     // Differentiable one-sample delay
     // <u, u'>[n-1] = <u[n-1], u'[n-1]>
-    diff(mem) = diffmem with{ diffmem = mem,par(i, vars.N, mem); };
+    diff(mem) = diffmem with { diffmem = mem,par(i, vars.N, mem); };
 
     // Differentiable int cast... derivative should be nonzero for sin(pi*u) == 0
     // int(<u, u'>) = <int(u), d>
@@ -452,7 +370,7 @@ env(vars) = environment {
     // This isn't perfectly mathematically sound.
     // For algorithms where int cast is useful it's also unlikely that u will land
     // precisely on an integer value at time n.
-    diff(int) = diffint
+    diff(int) = diffint1
     with{
         diffint = (
             _ <: (int <: _,_),_,_,_'
@@ -464,6 +382,14 @@ env(vars) = environment {
         : _,route(1+vars.N,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*i+2)))
         // And (chain rule) multiply by u'
         : _,par(i,vars.N,*);
+
+        // Ignore the discontinuities?
+        diffint1 = int,par(i, vars.N, _);
+
+        // If u[n] > u[n-1], u has just stepped up by 1; if u[n] < u[n-1], u has stepped down by 1.
+        diffint2 = (int <: _,(_,_',1,-1 : select2(<) <: par(i, vars.N, _))),par(i, vars.N, _)
+            : _,routes.outerleave(vars.N, 2)
+            : _,par(i, vars.N, *);
     };
 
     // Differentiable delay
@@ -473,19 +399,15 @@ env(vars) = environment {
     //
     // <u, u'>[n-<v, v'>] = <u[n-v], u'[n-v] - v' * (u[n-v])'_n>
     //                    = u@v,u'@v,v',(u@v)'_n : _,_,* : _,-;
-    diff(@) = diffdelay
-    with {
-        diffdelay = interleaveBinary
-            : @,par(n, vars.N,
-                _,(_ <: _,_),_,_
-                // : @,routes.cross(2),_
-                // : _,(@ <: _,mem),_
-                // : _,-,_
-                // : _,*
-                // : -
-                : @ - (routes.cross(2) : @ <: _,mem : -)*_
-            );
-    };
+    diff(@) = diffdelay with { diffdelay = binary(@, (
+        _,(_ <: _,_),_,_
+        // : @,routes.cross(2),_
+        // : _,(@ <: _,mem),_
+        // : _,-,_
+        // : _,*
+        // : -
+        : @ - (routes.cross(2) : @ <: _,mem : -)*_
+    )); };
 
     //======================Differentiable utilities============================
     //
@@ -494,21 +416,14 @@ env(vars) = environment {
     // A differentiable constant signal.
     // Returns the signal, plus its partial derivatives wrt all variables, which
     // are all zero.
-    // <x, x'> = <x, 0>
-    diff(x) = diffconst with{ diffconst = x,par(i,vars.N,0); };
-
-    // Helper division function.
-    // Ensures that division by zero is avoided.
-    div(x, y) = divi with {
-        // divi = x,(y, ma.EPSILON : max) : /;
-        divi = x,(y,(ma.EPSILON,-1*ma.EPSILON : select2(y < 0)) : select2(abs(y) < ma.EPSILON)) : /;
-    };
+    // <c, c'> = <c, 0>
+    diff(c) = diffconst with{ diffconst = c,par(i, vars.N, 0); };
 
     // A differentiable (audio) input. Similar to a number.
     // Returns the input, plus its partial derivatives wrt all variables, which
     // are all zero.
     // <x, x'> = <x, 0>
-    input = _,par(i,vars.N,0);
+    input = _,par(i, vars.N, 0);
 
     // f0 is a dual signal
     phasor(f0) = f0,diff(ma.SR)
@@ -536,7 +451,6 @@ env(vars) = environment {
     //
     //=========================================================================
 
-    // TODO: fix vars.var access
     neuron(NINPUTS, activationFunction) = Z : activationFunction
     with {
         WX = par(i, NINPUTS, vars.var(i+1),diff(_) : diff(*));
@@ -895,29 +809,41 @@ env(vars) = environment {
             : route(vars.N+1,vars.N*2,par(i,vars.N,(1,2*i+1),(i+2,2*(i+1))));
     };
 } with {
-    interleaveUnary = (_ <: par(i, vars.N + 1, _)),par(i, vars.N, _)
-        : _,routes.outerleave(vars.N, 2);
+    unary(primal, tangent) = routing : primal,par(i, vars.N, tangent)
+    with {
+        routing =
+            // Split u N times.
+            (_ <: par(i, vars.N + 1, _)),par(i, vars.N, _)
+            // Distribute u amongst u': u'1,u, ..., u'N,u
+            : _,routes.outerleave(vars.N, 2);
+    };
 
-    // Prepare signals for computation for derivatives of the form u'v · v'u.
-    // See diffmul, diffdiv, diffdelay.
-    interleaveBinary =
-        // Duplicate u and v for primal computation.
-        par(j, 2, (_ <: _,_),si.bus(vars.N))
-        // Move a copy of v where it can easily be combined with a copy of u.
-        // Move u after its partial derivatives.
-        : _,routes.swapOuter(vars.N + 2),si.bus(vars.N+1)
-        : _,_,(
-            // Split u and v. Result: du1,...,duN, u,...,u, v,...,v, dv1,...,dvN
-            si.bus(vars.N),(_ <: si.bus(vars.N)),(_ <: si.bus(vars.N)),si.bus(vars.N)
-            // Interleave u and v separately. Result: du1,u,...duN,u, v,dv1,...,v,dvN
-            : par(i, 2, routes.interleave(vars.N, 2))
-            // Interleave u and v together. Result: du1,v,u,dv1,...,duN,v,u,dvN
-            : routes.interleave(2*vars.N, 2)
-        );
+    binary(primal, tangent) = routing : primal,par(i, vars.N, tangent)
+    with {
+        routing =
+            // Duplicate u and v for primal computation.
+            // Result: u,u,du1,...,duN, v,v,dv1,...,dvN
+            par(j, 2, (_ <: _,_),si.bus(vars.N))
+            // Move a copy of v where it can easily be combined with a copy of u.
+            // Move u after its partial derivatives.
+            // Result: u,v, du1,...duN,u, v,dv1,...,dvN
+            : _,routes.swapOuter(vars.N + 2),si.bus(vars.N+1)
+            : _,_,(
+                // Split u and v. Result: du1,...,duN, u,...,u, v,...,v, dv1,...,dvN
+                si.bus(vars.N),(_ <: si.bus(vars.N)),(_ <: si.bus(vars.N)),si.bus(vars.N)
+                // Interleave u and v separately. Result: du1,u,...duN,u, v,dv1,...,v,dvN
+                : par(i, 2, routes.interleave(vars.N, 2))
+                // Interleave u and v together. Result: du1,v,u,dv1,...,duN,v,u,dvN
+                : routes.interleave(2*vars.N, 2)
+            );
+    };
 
     // Avoid division by zero.
     // This uses a lambda abstraction and isn't differentiable.
     safediv(x, y) = x,(y,(ma.EPSILON,-1*ma.EPSILON : select2(y < 0)) : select2(abs(y) < ma.EPSILON)) : /;
+
+    // This one works for guaranteed-positive denominators.
+    positiveSafediv = _,_,ma.EPSILON : _,max : /;
 };
 
 //===========================Activation Functions===========================
